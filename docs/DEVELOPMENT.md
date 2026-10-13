@@ -1,0 +1,49 @@
+# Development notes
+
+## Source map (`firmware/inkblink/`)
+
+| File | Role |
+|---|---|
+| `inkblink.ino` | main program: screens, settings, library, reader, statistics, sleep, hotspot and web server |
+| `board_crowpanel.h` | the board layer: pins, key reading, battery ADC, deep sleep, drawing primitives (`gfx*`), full/fast presenting |
+| `input.h` | key events: press, repeat with acceleration, short / long press |
+| `reader_fonts.h` | font families, size tables, glyph measurement, line height, drawing of a text line |
+| `hyphen.h` | Polish hyphenation rules |
+| `clock.h` | time zones (POSIX TZ), time formatting, setting the system time |
+| `qr.h` | self-contained QR code generator (byte mode, ECC M, versions 1-5) |
+| `ui_gfx.h` | UI shapes: icons, QR drawing, battery |
+| `webui_assets.h` | HTML/CSS/JS of the web interface (PROGMEM) |
+| `partitions.csv` | 2 MB app + about 5.9 MB LittleFS |
+
+The e-paper driver files are provided locally (see `driver/README.md`).
+
+## Concepts worth knowing
+
+- **Pagination and the page index.** For every book and layout the firmware builds an index of page start offsets and caches it in `/i<hash>_<layout>.idx`. The layout signature (`layoutSig()`) hashes font, size, bold, status line visibility, text width, lines per page, line height and the hyphenation setting. If you change the wrapping or hyphenation algorithm, bump `WRAP_VERSION` / `HYPHEN_VERSION` so old indexes are discarded. Bookmarks are stored as byte offsets, so they survive layout changes.
+- **Line wrapping** (`layoutLine()`): counts pixels, not characters. A word that does not fit is hyphenated if allowed (`hyphen.h`, at most two hyphenated lines in a row per page), otherwise moved to the next line. The hyphen is drawn at display time; the text file is never modified.
+- **Glyph measurement** (`reader_fonts.h`): U8g2's `getUTF8Width()` returns the visible width for the last glyph, so advances are measured as `width("cc") - width("c")` and cross-checked against a probe string. Line height comes from drawing a probe string with accents and descenders into the frame buffer and measuring the real ink extent. Synthetic bold (Unifont) draws each glyph twice with the same advance the wrapper uses.
+- **Chapter list**: EPUB import writes `<name>.toc` next to `<name>.txt`: one line per chapter, `byte-offset<TAB>title`, offsets ascending, UTF-8, at most 300 chapters, file at most 24 KB. The firmware cuts titles to 31 bytes.
+- **Fast refresh**: list screens and (optionally) page flips send the previous and the new frame to the controller and run a partial waveform; a full refresh is forced periodically to clear ghosts.
+- **Web interface**: served from PROGMEM, no external assets. The Books page script is `tools/epub/epub.js` + `tools/epub/books_page.js`, embedded into `webui_assets.h` by `tools/sync_webui_epub.py`.
+- **Arduino IDE prototype pitfall**: the IDE inserts function prototypes at the top of the sketch. Avoid default arguments, and define structs/enums before functions that use them. `tests/test_arduino_prototypes.cpp` emulates this step.
+
+## Adding another board
+
+Create a `board_<name>.h` that provides the same interface as `board_crowpanel.h` (`boardInit`, `boardReadKey`, `boardKeyDown`, `boardWaitRelease`, `boardBatteryMv`, `boardPinMv`, `boardDeepSleep`, `gfxClear`, `gfxInk`, `gfxWhite`, `gfxIsInk`, `gfxText*`, `gfxHLine`, `gfxPresent`, `gfxPresentFast`, `gfxFastReady`, the pin/key constants and screen size) and select it in `inkblink.ino`. The LilyGo T5 2.13" (GxEPD2) is the planned second target. The stand-in driver in `tests/stubs/` shows the minimum API.
+
+## Tests
+
+```sh
+make -C tests test          # C++ host tests + JavaScript tests
+make -C tests test-driver   # also tests that need the real Elecrow driver files
+```
+
+- The firmware sources are compiled unchanged with g++ against stand-ins in `tests/stubs/` (Arduino, WiFi, WebServer, LittleFS, Preferences, DNS, U8g2, e-paper driver). `tests/common.cpp` holds the shared mock state; each `test_*.cpp` includes `inkblink.ino` and drives the firmware functions directly.
+- Frame-buffer assertions use `gfxIsInk()`; the stand-in "Classic" font draws simple shapes, so ink counts are meaningful but glyph shapes are not. The stand-in U8g2 mimics real metrics (visible-width quirk, accents above the cap height, descender tails), which is what the wrapping and line-spacing tests rely on.
+- What the tests do **not** cover: real display output, SPI timing, WiFi/captive portal behaviour on phones, deep sleep and wake-up, battery ADC, clock drift, flash wear, and the real U8g2 glyph bitmaps. Check those on the device.
+- EPUB tests build small synthetic EPUB files (`tools/epub/make_samples.py`), not commercial books.
+- Output images of some tests are written to `tests/build/run/png/` as raw 250 x 122 bitmaps for inspection.
+
+## Code language
+
+Most comments in the code are in Polish (the author's language); on-device texts and the web UI are English. Translating comments is a welcome contribution.
