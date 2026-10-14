@@ -133,8 +133,9 @@ struct Settings {
   bool clockBook;      // zegar w pasku stanu w ksiazce
   uint8_t tz;          // strefa czasowa (indeks w TZS)
   bool fastMenu;       // szybkie (bez migania) odswiezanie list w menu
+  uint8_t uiFont;      // czcionka menu i naglowkow: 0 Classic, 1 Helvetica
 };
-Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true };
+Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 1 };
 
 // Czy pasek stanu w ogole jest rysowany (wplywa na uklad strony, wiec bateria go nie zmienia)
 // Czy wlaczona jest choc jedna pozycja paska stanu (glowny przelacznik "Status line" pokazuje ten stan)
@@ -163,6 +164,7 @@ void applyLayout() {
   if (cfg.lineGap > 2) cfg.lineGap = 0;
   if (cfg.clockMode > 2) cfg.clockMode = 0;
   if (cfg.tz >= TZ_COUNT) cfg.tz = 0;
+  if (cfg.uiFont > 1) cfg.uiFont = 0;
   fontSetLineGap(lineGapVals[cfg.lineGap]);
   fontSelect(cfg.famIdx, cfg.fontIdx, cfg.bold);
 
@@ -583,10 +585,23 @@ void drawLegend(const char* top, const char* mid, const char* bot, bool arrows) 
   }
 }
 
-// Naglowek ekranu: pogrubiony (kazdy zapalony piksel dostaje sasiada z prawej)
+// Czy menu i naglowki rysujemy Helvetica (ustawienie "Menu font"; bez U8g2 zawsze Classic)
+#if USE_U8G2
+inline bool uiHelvOn() { return cfg.uiFont == 1; }
+#else
+inline bool uiHelvOn() { return false; }
+#endif
+
+// Naglowek ekranu. Helvetica Bold albo - w Classic - zwykly tekst (pogrubianie gestej czcionki
+// Classic zlewalo "M" i "W" w czarny klocek).
 void drawTitle(int x, const char* t) {
+#if USE_U8G2
+  if (uiHelvOn()) {
+    uiTextHelv(x, 0, t, true);
+    return;
+  }
+#endif
   gfxText(x, 0, t, FONT_SIZE);
-  gfxEmbolden(x, 0, x + gfxTextWidth(t, FONT_SIZE), FONT_SIZE, 1);
 }
 
 // Rysuje liste do bufora (bez wysylania na ekran)
@@ -599,6 +614,21 @@ void drawListBody(const char* title, ItemFn item, int count, int sel,
   if (sel >= LIST_ROWS) top0 = sel - LIST_ROWS + 1;
 
   for (int r = 0; r < LIST_ROWS && top0 + r < count; r++) {
+#if USE_U8G2
+    if (uiHelvOn()) {
+      if (top0 + r == sel) gfxText(UI_X, 16 + r * 16, ">", FONT_SIZE);          // kursor
+      char txt[UI_CHARS + 1];
+      snprintf(txt, sizeof(txt), "%s", item(top0 + r));
+      int maxW = SCREEN_W - TAG_COL_W - (UI_X + 16) - 2;                         // przed kolumna legendy
+      int n = (int)strlen(txt);
+      while (n > 0 && uiWidthHelv(txt, false) > maxW) {                          // zabezpieczenie: nie wchodz pod legende
+        txt[--n] = '\0';
+        while (n > 0 && ((uint8_t)txt[n] & 0xC0) == 0x80) txt[--n] = '\0';
+      }
+      uiTextHelv(UI_X + 16, 16 + r * 16, txt, false);
+      continue;
+    }
+#endif
     char line[UI_CHARS + 1];
     snprintf(line, sizeof(line), "%c %s", (top0 + r == sel) ? '>' : ' ', item(top0 + r));
     gfxText(UI_X, 16 + r * 16, line, FONT_SIZE);
@@ -1616,6 +1646,7 @@ void loadSettings() {
   cfg.clockBook = prefs.getBool("cfg_cb", cfg.clockBook);
   cfg.tz = prefs.getUChar("cfg_tz", cfg.tz);
   cfg.fastMenu = prefs.getBool("cfg_mf", cfg.fastMenu);
+  cfg.uiFont = prefs.getUChar("cfg_uf", cfg.uiFont);
   if (cfg.sleepIdx > 4) cfg.sleepIdx = 1;
   if (cfg.batMode > 2) cfg.batMode = 1;
   if (cfg.fullEvery > 2) cfg.fullEvery = 1;
@@ -1645,6 +1676,7 @@ void saveSettings() {
   prefs.putBool("cfg_cb", cfg.clockBook);
   prefs.putUChar("cfg_tz", cfg.tz);
   prefs.putBool("cfg_mf", cfg.fastMenu);
+  prefs.putUChar("cfg_uf", cfg.uiFont);
 }
 
 const char* onOff(bool b) {
@@ -1654,7 +1686,7 @@ const char* onOff(bool b) {
 // Ustawienia sa podzielone na grupy (menu dwupoziomowe)
 #define SET_GROUPS 4
 static const char* const SET_GROUP_NAMES[SET_GROUPS] = { "Reading", "Status line", "Clock", "Power & system" };
-static const uint8_t SET_GROUP_ITEMS[SET_GROUPS] = { 6, 7, 3, 7 };
+static const uint8_t SET_GROUP_ITEMS[SET_GROUPS] = { 6, 7, 3, 8 };
 
 // Teksty pozycji maja co najwyzej UI_CHARS - 2 znakow (przed nimi jest "> ")
 const char* groupItem(int g, int i) {
@@ -1706,8 +1738,9 @@ const char* groupItem(int g, int i) {
       case 1: snprintf(b, sizeof(b), "Sleep screen: %s", sleepNames[cfg.sleepScreen % 3]); break;
       case 2: snprintf(b, sizeof(b), "Page flip: %s", cfg.fastFlip ? "Fast beta" : "Full"); break;
       case 3: snprintf(b, sizeof(b), "Menu flip: %s", cfg.fastMenu ? "Fast" : "Full"); break;
-      case 4: snprintf(b, sizeof(b), "Full every: %d pages", fullEveryVals[cfg.fullEvery % 3]); break;
-      case 5: snprintf(b, sizeof(b), "Open last book: %s", onOff(cfg.autoOpen)); break;
+      case 4: snprintf(b, sizeof(b), "Menu font: %s", cfg.uiFont == 1 ? "Helvetica" : "Classic"); break;
+      case 5: snprintf(b, sizeof(b), "Full every: %d pages", fullEveryVals[cfg.fullEvery % 3]); break;
+      case 6: snprintf(b, sizeof(b), "Open last book: %s", onOff(cfg.autoOpen)); break;
       default: snprintf(b, sizeof(b), "Hotspot: %s", apPassword().c_str()); break;
     }
   }
@@ -1778,8 +1811,9 @@ void groupChange(int g, int i) {
       case 1: cfg.sleepScreen = (cfg.sleepScreen + 1) % 3; break;
       case 2: cfg.fastFlip = !cfg.fastFlip; break;
       case 3: cfg.fastMenu = !cfg.fastMenu; break;
-      case 4: cfg.fullEvery = (cfg.fullEvery + 1) % 3; break;
-      case 5: cfg.autoOpen = !cfg.autoOpen; break;
+      case 4: cfg.uiFont = cfg.uiFont == 1 ? 0 : 1; break;
+      case 5: cfg.fullEvery = (cfg.fullEvery + 1) % 3; break;
+      case 6: cfg.autoOpen = !cfg.autoOpen; break;
       default: apPasswordNew(); break;       // nowe haslo hotspotu
     }
   }
@@ -2264,6 +2298,9 @@ void handleConfigGet() {
        "<label class='f'>Menu refresh</label><select name='mflip'>";
   optTag(h, 1, "Fast (no flash when moving in lists)", cfg.fastMenu);
   optTag(h, 0, "Full refresh", !cfg.fastMenu);
+  h += "</select><label class='f'>Menu font</label><select name='uifont'>";
+  optTag(h, 1, "Helvetica (clear letters)", cfg.uiFont == 1);
+  optTag(h, 0, "Classic (pixel font)", cfg.uiFont == 0);
   h += "</select></div>";
   server.sendContent(h);
 
@@ -2316,6 +2353,7 @@ void handleConfigPost() {
   if (bm >= 0 && bm <= 2) cfg.batMode = bm;
   cfg.fastFlip = server.arg("flip").toInt() == 1;
   if (server.hasArg("mflip")) cfg.fastMenu = server.arg("mflip").toInt() == 1;
+  if (server.hasArg("uifont")) cfg.uiFont = server.arg("uifont").toInt() == 1 ? 1 : 0;
   int fe = server.arg("fullev").toInt();
   if (fe >= 0 && fe <= 2) cfg.fullEvery = fe;
   int sl = server.arg("sleep").toInt();

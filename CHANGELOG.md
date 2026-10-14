@@ -15,4 +15,5 @@ First tracked version of InkBlink (before: private prototype versions 0.1 - 0.8)
 - Battery indicator (pin setup required), pin finder on the Info screen
 - Fast partial refresh for page flips (beta) and flash-free menu navigation
 - Shortcuts: long BACK in the book opens the Reading settings, BACK in the menu returns to the book
+- Menu and screen titles in Helvetica (setting *Menu font*: Helvetica / Classic); clear "l", real bold titles
 - Host test suite (C++ and JavaScript), EPUB tools

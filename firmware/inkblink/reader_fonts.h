@@ -272,6 +272,26 @@ inline int fontCharW(uint32_t cp) {
 
 // Rysuje 'len' bajtow UTF-8 w jednym wierszu; rowTop = gorna krawedz wiersza
 // (juz z odstepem fontTopPad), x od LEWEJ krawedzi.
+#if USE_U8G2
+// Tekst interfejsu (menu, listy, naglowki) w Helvetice 14 px: wyrazne "l" (w Classic wyglada jak "1")
+// i prawdziwy bold. y = gorna krawedz wiersza (jak w gfxText). Zwraca szerokosc napisu w px.
+inline void uiSetHelv(bool bold) {
+  u8g2.setFont(bold ? u8g2_font_helvB14_te : u8g2_font_helvR14_te);
+  u8g2.setFontMode(1);
+  u8g2.setFontDirection(0);
+  u8g2.setForegroundColor(1);
+}
+inline int uiWidthHelv(const char* s, bool bold) {
+  uiSetHelv(bold);
+  return u8g2.getUTF8Width(s);
+}
+inline int uiTextHelv(int x, int y, const char* s, bool bold) {
+  uiSetHelv(bold);
+  u8g2.drawUTF8(x, y + u8g2.getFontAscent() + 1, s);
+  return u8g2.getUTF8Width(s);
+}
+#endif
+
 inline void fontDrawLine(int x, int rowTop, const char* s, int len) {
   if (len <= 0) return;
 

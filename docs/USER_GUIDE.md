@@ -31,7 +31,7 @@ Black tags on the right edge of the screen show what the three keys (top = HOME,
 | HOME (short) | menu |
 | HOME (long) | sleep |
 
-**Go to page** - UP/DOWN change the page; OK cycles the step (1, 10, 100, 1000 and **chapter** for books imported from EPUB); HOME = GO; BACK = cancel. In chapter step the chapter title is shown and UP/DOWN jump between chapters.
+**Go to page** - UP/DOWN change the page; OK cycles the step (1, 10, 100, 1000 and, only for books imported from EPUB with a chapter list, **chapter**); HOME = GO; BACK = cancel. In chapter step the chapter title is shown and UP/DOWN jump between chapters.
 
 **Settings** (four groups, OK enters, BACK leaves; changes are saved when you leave)
 
@@ -40,7 +40,7 @@ Black tags on the right edge of the screen show what the three keys (top = HOME,
 | Reading | Font (Classic / Helvetica / Unifont / Century), size, bold, line spacing, margins, hyphenation |
 | Status line | master switch (turns all items on/off), percent, page n/N, time left, progress bar, clock in book, battery (Off / Low / Always) |
 | Clock | format (Off / 24 h / 12 h), time zone, current time |
-| Power & system | sleep after (1 / 5 / 10 / 30 min / never), sleep screen (Book / Image / Keep), page flip (Full / Fast beta), menu flip (Fast / Full), full refresh every N pages, open last book at start, hotspot password (OK generates a new one) |
+| Power & system | sleep after (1 / 5 / 10 / 30 min / never), sleep screen (Book / Image / Keep), page flip (Full / Fast beta), menu flip (Fast / Full), **menu font (Helvetica / Classic)**, full refresh every N pages, open last book at start, hotspot password (OK generates a new one) |
 
 **Upload books** - starts the reader's own WiFi hotspot. First screen: QR code to join the network (or type the name and password shown). OK switches to the second QR code (the web page). The screen also shows the number of connected phones and received requests, and the name of the last uploaded book. BACK stops the hotspot. Auto-sleep is disabled while uploading.
 

@@ -66,9 +66,13 @@ int main(){
 
   SECTION("T41 naglowki pogrubione, skrot do paska stanu z ksiazki");
   { cfg=Settings{FAM_CLASSIC,0,false,true,true,false,true,1,false,1,1,0,true,0,0,false,0,false,0,true}; applyLayout(); prefs.s.erase("last");
-    gfxClear(); gfxText(UI_X,0,"Settings",FONT_SIZE); int plain=inkIn(0,0,120,15); goMenu(); int bold=inkIn(0,0,60,15); gfxClear(); gfxText(UI_X,0,"Menu",FONT_SIZE); int plainMenu=inkIn(0,0,60,15); goMenu(); bold=inkIn(0,0,60,15);
-    printf("  naglowek 'Menu': zwykly %d px tuszu, pogrubiony %d px\n",plainMenu,bold); CHECK(bold>plainMenu*12/10);
-    goSettings(); int bs=inkIn(0,0,120,15); CHECK(bs>plain*11/10); goInfo(); CHECK(inkIn(0,0,40,15)>0); goStats(); CHECK(inkIn(0,0,50,15)>0); printf("  pogrubione tez: Settings, Info, Stats, Go to page, Upload\n");
+    // Classic: naglowek bez pogrubiania (pogrubianie gestej czcionki zlewalo "M" w klocek)
+    gfxClear(); gfxText(UI_X,0,"Menu",FONT_SIZE); int plainMenu=inkIn(0,0,60,15); goMenu(); int classicTitle=inkIn(0,0,60,15);
+    printf("  naglowek 'Menu' w Classic: zwykly %d px tuszu, w menu %d px (bez pogrubiania)\n",plainMenu,classicTitle); CHECK(classicTitle==plainMenu);
+    // Helvetica: pogrubiony naglowek, kursor i pozycje w innej czcionce
+    cfg.uiFont=1; menuSel=0; goMenu(); int helvTitle=inkIn(0,0,60,15); CHECK(helvTitle>0 && helvTitle!=plainMenu); int itemInk=inkIn(UI_X+16,16,200,31); CHECK(itemInk>20 && inkIn(UI_X,16,UI_X+7,31)>5);
+    printf("  Helvetica: naglowek %d px, pierwsza pozycja %d px, kursor jest\n",helvTitle,itemInk);
+    goSettings(); CHECK(inkIn(0,0,120,15)>0); goInfo(); CHECK(inkIn(0,0,40,15)>0); goStats(); CHECK(inkIn(0,0,50,15)>0); cfg.uiFont=0;
     // skrot z ksiazki: HOME przelacza Reading <-> Status line
     CHECK(openBook("B.txt")); screen=S_READER; page=30; showPage(false); int lpBefore=linesPerPage; uint32_t off=pageOff[page]; onKeyReader(K(KEY_BACK,EV_LONG)); CHECK(screen==S_SETTINGS && setGroup==0);
     int tagTop=inkIn(SCREEN_W-TAG_COL_W,0,SCREEN_W-1,TAG_H); CHECK(tagTop>50);                          // etykieta STATUS
@@ -82,5 +86,18 @@ int main(){
     // strona WWW: glowny przelacznik (JS zaznacza/odznacza podopcje), serwer czyta podopcje
     g_lastBody.clear(); g_args.clear(); handleConfigGet(); CHECK(g_lastBody.find("id='stm'")!=std::string::npos && g_lastBody.find("Show the status line")!=std::string::npos && g_lastBody.find("getElementsByName(n)")!=std::string::npos && g_lastBody.find("'clkbook'")!=std::string::npos);
     g_args.clear(); g_args["pct"]="on"; handleConfigPost(); CHECK(cfg.showPct && !cfg.showPage && statusAnyOn()); g_args.clear(); handleConfigPost(); CHECK(!statusAnyOn() && !statusVisible()); statusSetAll(true); printf("  strona WWW: pole 'Show the status line'\n"); }
+
+
+  SECTION("T42 czcionka menu: zadna pozycja nie wchodzi pod legende");
+  { cfg=Settings{FAM_CLASSIC,1,false,true,true,false,true,1,false,1,1,0,true,0,0,false,0,false,0,true,1}; applyLayout(); prefs.s.erase("last"); int worst=0, bad=0, n=0;
+    for(int g=0; g<SET_GROUPS; g++){ for(int i=0;i<SET_GROUP_ITEMS[g];i++){ setGroup=g; setSel=i; screen=S_SETTINGS; drawSettings(); int ov=inkIn(SCREEN_W-TAG_COL_W-1,16,SCREEN_W-TAG_COL_W+3,106); n++; if(ov>0) bad++; int rows=inkIn(UI_X+16,16,SCREEN_W-TAG_COL_W-3,112); if(rows>worst) worst=rows; } }
+    printf("  %d pozycji ustawien w Helvetice, pod legende wchodzi: %d\n",n,bad); CHECK(bad==0);
+    // ksiazka z dlugim tytulem w bibliotece
+    writeFile("Bardzo_dluga_nazwa_ksiazki_ktora_nie_miesci_sie_w_wierszu_menu_aaaaaaaaaaaaaaaaaa.txt","x"); scanBooks(); goLibrary(); CHECK(inkIn(SCREEN_W-TAG_COL_W-1,16,SCREEN_W-TAG_COL_W+3,106)==0); printf("  biblioteka: dluga nazwa ucieta przed legenda\n");
+    // wylaczenie Helvetiki wraca do Classic
+    cfg.uiFont=0; goMenu(); int c0=inkIn(UI_X+16,16,200,31); cfg.uiFont=1; goMenu(); int c1=inkIn(UI_X+16,16,200,31); CHECK(c0>20 && c1>20 && c0!=c1); setGroup=-1;
+    // strona WWW i zapis
+    g_lastBody.clear(); g_args.clear(); handleConfigGet(); CHECK(g_lastBody.find("name='uifont'")!=std::string::npos && g_lastBody.find("Helvetica (clear letters)")!=std::string::npos);
+    g_args.clear(); g_args["uifont"]="0"; handleConfigPost(); CHECK(cfg.uiFont==0 && prefs.u["cfg_uf"]==0); g_args["uifont"]="1"; handleConfigPost(); CHECK(cfg.uiFont==1 && prefs.u["cfg_uf"]==1); g_args["uifont"]="9"; handleConfigPost(); CHECK(cfg.uiFont==0); printf("  strona WWW: Menu font\n"); cfg.uiFont=1; }
 
   printf("\n==== TESTY MENU, SKROTOW I ODSTEPOW: %d OK, %d bledow ====\n",passN,failN); return failN?1:0; }

@@ -206,8 +206,9 @@ int main(){
     setSel=0; onKeySettings(ok); CHECK(cfg.sleepIdx==2); setSel=1; onKeySettings(ok); CHECK(cfg.sleepScreen==1); onKeySettings(ok); onKeySettings(ok); CHECK(cfg.sleepScreen==0);
     setSel=2; onKeySettings(ok); CHECK(cfg.fastFlip && strstr(settingsItem(2),"Fast")!=nullptr); onKeySettings(ok); CHECK(!cfg.fastFlip);
     setSel=3; onKeySettings(ok); CHECK(cfg.fastMenu && strstr(settingsItem(3),"Fast")!=nullptr); onKeySettings(ok); CHECK(!cfg.fastMenu && strstr(settingsItem(3),"Full")!=nullptr); onKeySettings(ok); CHECK(cfg.fastMenu);
-    setSel=4; onKeySettings(ok); CHECK(cfg.fullEvery==2); onKeySettings(ok); CHECK(cfg.fullEvery==0);
-    setSel=6; onKeySettings(ok); CHECK(strncmp(settingsItem(6),"Hotspot: ",9)==0);
+    setSel=4; onKeySettings(ok); CHECK(cfg.uiFont==1 && strstr(settingsItem(4),"Helvetica")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==0 && strstr(settingsItem(4),"Classic")!=nullptr);
+    setSel=5; onKeySettings(ok); CHECK(cfg.fullEvery==2); onKeySettings(ok); CHECK(cfg.fullEvery==0);
+    setSel=7; onKeySettings(ok); CHECK(strncmp(settingsItem(7),"Hotspot: ",9)==0);
     setSel=settingsCount()-1; onKeySettings(dn); CHECK(setSel==0); onKeySettings(up); CHECK(setSel==settingsCount()-1);
     KeyEvent hm{KEY_HOME,EV_SHORT,0}; onKeySettings(hm); CHECK(screen==S_SETTINGS && setGroup==3); printf("  HOME w ustawieniach nic nie robi\n");
     onKeySettings(bk); CHECK(setGroup==-1); onKeySettings(bk); CHECK(screen==S_MENU); CHECK(prefs.u["cfg_bd"]==1 && prefs.u["cfg_cb"]==1); printf("  BACK: z grupy na liste, z listy do menu; ustawienia zapisane\n");
