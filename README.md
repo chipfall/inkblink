@@ -28,18 +28,17 @@ It turns the board into a small pocket reader: plain-text books and EPUB files (
 ## Quick start
 
 1. Install **Arduino IDE 2.x** with the **ESP32 Arduino core 3.x** and these libraries: `Adafruit GFX Library`, `U8g2_for_Adafruit_GFX`.
-2. Copy the e-paper driver files into `firmware/inkblink/` — see [firmware/inkblink/driver/README.md](firmware/inkblink/driver/README.md). *(They are not part of this repository yet; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).)*
-3. Open `firmware/inkblink/inkblink.ino` and select **ESP32S3 Dev Module** with:
+2. Open `firmware/inkblink/inkblink.ino` and select **ESP32S3 Dev Module** with:
    - Flash size **8 MB**, PSRAM **OPI PSRAM**, **USB CDC On Boot: Disabled**
    - the included `partitions.csv` (2 MB app + ~5.9 MB LittleFS for books; Arduino uses it automatically when it sits next to the sketch)
-4. Connect the board over USB-C and upload. If the board boot-loops after the first upload on top of the factory firmware, enable **Erase All Flash Before Sketch Upload** once, then disable it again.
-5. Add books: **Menu → Upload**, join the WiFi `InkBlink-XXXX` (scan the QR code or type the password shown), open `http://192.168.4.1`, drop `.txt` or `.epub` files.
+3. Connect the board over USB-C and upload. If the board boot-loops after the first upload on top of the factory firmware, enable **Erase All Flash Before Sketch Upload** once, then disable it again.
+4. Add books: **Menu → Upload**, join the WiFi `InkBlink-XXXX` (scan the QR code or type the password shown), open `http://192.168.4.1`, drop `.txt` or `.epub` files.
 
 Button reference and every screen: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Hardware
 
-Only the CrowPanel 2.13" V1.2 is supported now. The code is split so another board (planned: LilyGo T5 2.13") needs a new `board_*.h` and driver glue. Pins, buttons, battery, and enclosure-relevant dimensions: [docs/HARDWARE.md](docs/HARDWARE.md).
+Only the CrowPanel 2.13" V1.2 is supported now. The e-paper driver for it (Elecrow's code, included with their permission) is in `firmware/inkblink/`. The code is split so another board (planned: LilyGo T5 2.13") needs a new `board_*.h` and driver glue. Pins, buttons, battery, and enclosure-relevant dimensions: [docs/HARDWARE.md](docs/HARDWARE.md).
 
 ## Testing
 
@@ -66,4 +65,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Note: most code comments are currently i
 
 ## License
 
-Original code: MIT, see [LICENSE](LICENSE). Third-party components keep their own licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Original code: MIT, see [LICENSE](LICENSE). Third-party components - including Elecrow's driver files, which are *not* MIT-licensed - keep their own terms: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -12,5 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Host tests (C++ with stand-in libraries, JavaScript)
+      - name: Host tests (stand-in libraries, JavaScript, version check)
         run: make -C tests test
+      - name: Driver-dependent tests (real e-paper driver files)
+        run: make -C tests test-driver

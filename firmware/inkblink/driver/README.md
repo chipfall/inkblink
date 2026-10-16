@@ -1,18 +1,16 @@
-# E-paper driver files (not in this repository)
+# E-paper driver
 
-The firmware talks to the screen through a small driver API. For the CrowPanel V1.2 this is Elecrow's driver code, which is **not redistributed here** until Elecrow has granted permission (see `THIRD_PARTY_NOTICES.md`).
-
-## What you need locally
-
-Put these seven files **next to `inkblink.ino`** (they are listed in `.gitignore`, so they will never be committed by accident):
+The firmware talks to the screen through a small driver API. For the CrowPanel V1.2 this is Elecrow's driver code, which lives next to `inkblink.ino`:
 
 | File | Origin |
 |---|---|
-| `EPD.cpp`, `EPD.h`, `EPDfont.h` | Elecrow's repository (example / factory source) |
-| `spi.cpp`, `spi.h` | Elecrow's repository (pins SCK 12, MOSI 11, RES 10, DC 13, CS 14, BUSY 9) |
-| `EPD_Init.cpp`, `EPD_Init.h` | Elecrow's files **modified** for hardware V1.2 (JD79661 controller, inverted BUSY) plus `EPD_DisplayImageFast()` |
+| `EPD.cpp`, `EPD.h`, `EPDfont.h` | Elecrow's repository, unchanged |
+| `spi.cpp`, `spi.h` | Elecrow's repository, unchanged (pins SCK 12, MOSI 11, RES 10, DC 13, CS 14, BUSY 9) |
+| `EPD_Init.cpp`, `EPD_Init.h` | Elecrow's files, **modified** for hardware V1.2 (JD79661 controller, inverted BUSY) plus `EPD_DisplayImageFast()` |
 
-Elecrow's stock `EPD_Init.cpp` from the factory source does **not** initialise a V1.2 board (it waits forever on BUSY), so the modified version is required. If you are the project owner, your local sketch folder already has all seven files.
+They are included with Elecrow's permission and are not covered by this project's MIT license; see `THIRD_PARTY_NOTICES.md`.
+
+Elecrow's stock `EPD_Init.cpp` from the factory source does **not** initialise a V1.2 board (it waits forever on BUSY), so the modified version is required.
 
 ## API the firmware expects (`board_crowpanel.h`)
 
@@ -29,14 +27,8 @@ void EPD_DrawLine(uint16_t xs, uint16_t ys, uint16_t xe, uint16_t ye, uint8_t co
 void EPD_ShowChar(uint16_t x, uint16_t y, uint8_t num, uint8_t color, uint8_t sizey);  // "Classic" font
 ```
 
-Pixel semantics are documented in `gfxInk()`, `gfxWhite()` and `gfxIsInk()` in `board_crowpanel.h`. A stand-in implementation of exactly this API for tests lives in `tests/stubs/` (`EPD_stub.cpp`); it is a good starting point for a different driver (for example GxEPD2 on another board).
+Pixel semantics are documented in `gfxInk()`, `gfxWhite()` and `gfxIsInk()` in `board_crowpanel.h`. A stand-in implementation of exactly this API for the host tests lives in `tests/stubs/` (`EPD_stub.cpp`); it is a good starting point for a different driver (for example GxEPD2 on another board).
 
-## Running the driver-dependent tests
+## Tests
 
-With the seven files in place:
-
-```sh
-make -C tests test-driver
-```
-
-This also runs the tests that check the real register sequence of the fast refresh.
+`make -C tests test` runs against the stand-in driver; `make -C tests test-driver` runs the tests that need the real driver (the fast-refresh register sequence).

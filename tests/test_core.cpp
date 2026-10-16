@@ -1,4 +1,6 @@
 extern bool g_apFail;
+extern int g_apFailFirst;
+extern int g_txPower;
 extern bool g_slept;
 #include "inkblink.ino"
 #include <ctime>
@@ -206,9 +208,10 @@ int main(){
     setSel=0; onKeySettings(ok); CHECK(cfg.sleepIdx==2); setSel=1; onKeySettings(ok); CHECK(cfg.sleepScreen==1); onKeySettings(ok); onKeySettings(ok); CHECK(cfg.sleepScreen==0);
     setSel=2; onKeySettings(ok); CHECK(cfg.fastFlip && strstr(settingsItem(2),"Fast")!=nullptr); onKeySettings(ok); CHECK(!cfg.fastFlip);
     setSel=3; onKeySettings(ok); CHECK(cfg.fastMenu && strstr(settingsItem(3),"Fast")!=nullptr); onKeySettings(ok); CHECK(!cfg.fastMenu && strstr(settingsItem(3),"Full")!=nullptr); onKeySettings(ok); CHECK(cfg.fastMenu);
-    setSel=4; onKeySettings(ok); CHECK(cfg.uiFont==1 && strstr(settingsItem(4),"Helvetica")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==0 && strstr(settingsItem(4),"Classic")!=nullptr);
+    setSel=4; onKeySettings(ok); CHECK(cfg.uiFont==2 && strstr(settingsItem(4),"Helv 12")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==3 && strstr(settingsItem(4),"Unifont")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==0 && strstr(settingsItem(4),"Classic")!=nullptr);
     setSel=5; onKeySettings(ok); CHECK(cfg.fullEvery==2); onKeySettings(ok); CHECK(cfg.fullEvery==0);
-    setSel=7; onKeySettings(ok); CHECK(strncmp(settingsItem(7),"Hotspot: ",9)==0);
+    setSel=7; onKeySettings(ok); CHECK(cfg.apPower==1 && strstr(settingsItem(7),"Medium")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==2 && strstr(settingsItem(7),"High")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==0 && strstr(settingsItem(7),"Low")!=nullptr);
+    setSel=8; onKeySettings(ok); CHECK(strncmp(settingsItem(8),"Hotspot: ",9)==0);
     setSel=settingsCount()-1; onKeySettings(dn); CHECK(setSel==0); onKeySettings(up); CHECK(setSel==settingsCount()-1);
     KeyEvent hm{KEY_HOME,EV_SHORT,0}; onKeySettings(hm); CHECK(screen==S_SETTINGS && setGroup==3); printf("  HOME w ustawieniach nic nie robi\n");
     onKeySettings(bk); CHECK(setGroup==-1); onKeySettings(bk); CHECK(screen==S_MENU); CHECK(prefs.u["cfg_bd"]==1 && prefs.u["cfg_cb"]==1); printf("  BACK: z grupy na liste, z listy do menu; ustawienia zapisane\n");
@@ -268,6 +271,15 @@ int main(){
 
   SECTION("T12 uspienie");
   { g_slept=false; cfg.sleepIdx=0; goSleep(); CHECK(g_slept); }
+
+
+  SECTION("T44 hotspot: czysty start i ponawianie");
+  { cfg=Settings{FAM_CLASSIC,1,false,true,true,false,true,1,false,1,1,0,true,0,0,false,0,false,0,true,0}; applyLayout(); g_apFail=false;
+    g_apFailFirst=0; screen=S_MENU; goUpload(); CHECK(screen==S_UPLOAD && g_apUp && g_wifiMode==WIFI_AP); uploadStop(); CHECK(!g_apUp && g_wifiMode==WIFI_OFF);
+    g_apFailFirst=2; screen=S_MENU; goUpload(); CHECK(screen==S_UPLOAD && g_apUp && g_apFailFirst==0); printf("  dwie nieudane proby, trzecia dziala: hotspot wstaje\n"); uploadStop();
+    g_apFailFirst=3; screen=S_UPLOAD; goUpload(); CHECK(screen==S_MENU && !g_apUp && g_wifiMode==WIFI_OFF); printf("  trzy nieudane proby: komunikat i powrot do menu, WiFi wylaczone\n"); g_apFailFirst=0;
+    { int want[3]={34,52,78}; for(int pw=0;pw<3;pw++){ cfg.apPower=pw; g_txPower=0; screen=S_MENU; goUpload(); CHECK(screen==S_UPLOAD && g_txPower==want[pw]); uploadStop(); } printf("  moc hotspotu Low/Medium/High: ustawiana po starcie (%d/%d/%d)\n",want[0],want[1],want[2]); cfg.apPower=1; }
+    for(int i=0;i<5;i++){ screen=S_MENU; goUpload(); CHECK(screen==S_UPLOAD && g_apUp); uploadStop(); } printf("  5 szybkich wejsc i wyjsc z Upload pod rzad: za kazdym razem hotspot dziala\n"); }
 
   printf("\n==== WYNIK: %d testow OK, %d bledow ====\n",passN,failN);
   return failN?1:0;

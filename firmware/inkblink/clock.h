@@ -32,6 +32,7 @@ static const TzInfo TZS[] = {
 #define TZ_COUNT 15
 
 static time_t (*clockNowHook)() = nullptr;   // do testow na komputerze
+static void (*clockSetHook)(time_t) = nullptr;
 
 inline time_t clockNow() {
   return clockNowHook ? clockNowHook() : time(nullptr);
@@ -45,10 +46,33 @@ inline void clockApplyTz(int idx) {
   tzset();
 }
 inline bool clockSet(time_t t) {
+  if (clockSetHook) {                        // testy na komputerze
+    clockSetHook(t);
+    return true;
+  }
   struct timeval tv;
   tv.tv_sec = t;
   tv.tv_usec = 0;
   return settimeofday(&tv, nullptr) == 0;
+}
+inline int clockDaysInMonth(int y, int m) {
+  static const uint8_t dm[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) return 29;
+  return dm[(m - 1) % 12];
+}
+// Ustawia czas z pol w CZASIE LOKALNYM wybranej strefy (strefa musi byc juz ustawiona przez clockApplyTz)
+inline bool clockSetLocal(int y, int mo, int d, int h, int mi) {
+  struct tm tmv;
+  memset(&tmv, 0, sizeof(tmv));
+  tmv.tm_year = y - 1900;
+  tmv.tm_mon = mo - 1;
+  tmv.tm_mday = d;
+  tmv.tm_hour = h;
+  tmv.tm_min = mi;
+  tmv.tm_isdst = -1;                         // sam rozpoznaj czas letni
+  time_t t = mktime(&tmv);
+  if (t < 1700000000L) return false;
+  return clockSet(t);
 }
 // mode: 1 = 24h ("14:35"), 2 = 12h ("2:35pm"). Zwraca false, gdy czas nie jest ustawiony.
 inline bool clockFormat(char* out, size_t n, int mode) {
@@ -66,5 +90,17 @@ inline bool clockFormat(char* out, size_t n, int mode) {
   } else {
     snprintf(out, n, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
   }
+  return true;
+}
+// Data lokalna "RRRR-MM-DD"; false, gdy czas nie jest ustawiony.
+inline bool clockFormatDate(char* out, size_t n) {
+  if (!clockValid()) {
+    if (n) out[0] = 0;
+    return false;
+  }
+  time_t t = clockNow();
+  struct tm tmv;
+  localtime_r(&t, &tmv);
+  snprintf(out, n, "%04d-%02d-%02d", tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday);
   return true;
 }

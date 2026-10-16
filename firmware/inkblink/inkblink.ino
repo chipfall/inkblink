@@ -27,6 +27,7 @@
 #include <U8g2_for_Adafruit_GFX.h>
 #endif
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <LittleFS.h>
@@ -42,7 +43,7 @@
 #include "reader_fonts.h"       // czcionki ksiazki
 #include "webui_assets.h"       // strona WWW (HTML/CSS/JS)
 
-#define FW_VERSION "0.9"
+#define FW_VERSION "0.9.1-dev"      // MAJOR.MINOR.PATCH; "-dev" = praca w toku (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
 
 // ---------- Ustawienia ekranu / interfejsu ----------
 #define FONT_SIZE 16            // czcionka interfejsu (menu, komunikaty)
@@ -133,9 +134,10 @@ struct Settings {
   bool clockBook;      // zegar w pasku stanu w ksiazce
   uint8_t tz;          // strefa czasowa (indeks w TZS)
   bool fastMenu;       // szybkie (bez migania) odswiezanie list w menu
-  uint8_t uiFont;      // czcionka menu i naglowkow: 0 Classic, 1 Helvetica
+  uint8_t uiFont;      // czcionka menu i naglowkow: 0 Classic, 2 Helvetica 12, 3 Unifont (1 = dawne Helvetica 14, traktowane jak 2)
+  uint8_t apPower;     // moc nadawania hotspotu: 0 niska (8,5 dBm), 1 srednia (13 dBm), 2 wysoka (19,5 dBm)
 };
-Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 1 };
+Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 2, 1 };
 
 // Czy pasek stanu w ogole jest rysowany (wplywa na uklad strony, wiec bateria go nie zmienia)
 // Czy wlaczona jest choc jedna pozycja paska stanu (glowny przelacznik "Status line" pokazuje ten stan)
@@ -164,7 +166,9 @@ void applyLayout() {
   if (cfg.lineGap > 2) cfg.lineGap = 0;
   if (cfg.clockMode > 2) cfg.clockMode = 0;
   if (cfg.tz >= TZ_COUNT) cfg.tz = 0;
-  if (cfg.uiFont > 1) cfg.uiFont = 0;
+  if (cfg.uiFont == 1) cfg.uiFont = 2;            // dawne Helvetica 14 (zbyt ciasne w wierszach menu)
+  if (cfg.uiFont > 3) cfg.uiFont = 0;
+  if (cfg.apPower > 2) cfg.apPower = 1;
   fontSetLineGap(lineGapVals[cfg.lineGap]);
   fontSelect(cfg.famIdx, cfg.fontIdx, cfg.bold);
 
@@ -469,7 +473,7 @@ void removeAllIdx(const char* name) {
 // ============================================================
 //  Stan aplikacji
 // ============================================================
-enum Screen { S_MENU, S_LIBRARY, S_READER, S_UPLOAD, S_INFO, S_GOTO, S_SETTINGS, S_STATS, S_PINSCAN };
+enum Screen { S_MENU, S_LIBRARY, S_READER, S_UPLOAD, S_INFO, S_GOTO, S_SETTINGS, S_STATS, S_PINSCAN, S_SETTIME };
 Screen screen = S_MENU;
 bool fsOk = false;
 Preferences prefs;
@@ -585,19 +589,19 @@ void drawLegend(const char* top, const char* mid, const char* bot, bool arrows) 
   }
 }
 
-// Czy menu i naglowki rysujemy Helvetica (ustawienie "Menu font"; bez U8g2 zawsze Classic)
+// Czy menu i naglowki rysujemy czcionka U8g2 (ustawienie "Menu font"; bez U8g2 zawsze Classic)
 #if USE_U8G2
-inline bool uiHelvOn() { return cfg.uiFont == 1; }
+inline bool uiHelvOn() { return cfg.uiFont >= 1 && cfg.uiFont <= 3; }
 #else
 inline bool uiHelvOn() { return false; }
 #endif
 
-// Naglowek ekranu. Helvetica Bold albo - w Classic - zwykly tekst (pogrubianie gestej czcionki
-// Classic zlewalo "M" i "W" w czarny klocek).
+// Naglowek ekranu: pogrubiony w Helvetice; w Unifont i Classic zwykly (pogrubianie gestych czcionek
+// zlewalo "M" i "W" w czarny klocek).
 void drawTitle(int x, const char* t) {
 #if USE_U8G2
   if (uiHelvOn()) {
-    uiTextHelv(x, 0, t, true);
+    uiText(cfg.uiFont, x, 0, t, true);
     return;
   }
 #endif
@@ -621,11 +625,11 @@ void drawListBody(const char* title, ItemFn item, int count, int sel,
       snprintf(txt, sizeof(txt), "%s", item(top0 + r));
       int maxW = SCREEN_W - TAG_COL_W - (UI_X + 16) - 2;                         // przed kolumna legendy
       int n = (int)strlen(txt);
-      while (n > 0 && uiWidthHelv(txt, false) > maxW) {                          // zabezpieczenie: nie wchodz pod legende
+      while (n > 0 && uiWidth(cfg.uiFont, txt, false) > maxW) {                          // zabezpieczenie: nie wchodz pod legende
         txt[--n] = '\0';
         while (n > 0 && ((uint8_t)txt[n] & 0xC0) == 0x80) txt[--n] = '\0';
       }
-      uiTextHelv(UI_X + 16, 16 + r * 16, txt, false);
+      uiText(cfg.uiFont, UI_X + 16, 16 + r * 16, txt, false);
       continue;
     }
 #endif
@@ -1647,6 +1651,7 @@ void loadSettings() {
   cfg.tz = prefs.getUChar("cfg_tz", cfg.tz);
   cfg.fastMenu = prefs.getBool("cfg_mf", cfg.fastMenu);
   cfg.uiFont = prefs.getUChar("cfg_uf", cfg.uiFont);
+  cfg.apPower = prefs.getUChar("cfg_ap", cfg.apPower);
   if (cfg.sleepIdx > 4) cfg.sleepIdx = 1;
   if (cfg.batMode > 2) cfg.batMode = 1;
   if (cfg.fullEvery > 2) cfg.fullEvery = 1;
@@ -1677,6 +1682,7 @@ void saveSettings() {
   prefs.putUChar("cfg_tz", cfg.tz);
   prefs.putBool("cfg_mf", cfg.fastMenu);
   prefs.putUChar("cfg_uf", cfg.uiFont);
+  prefs.putUChar("cfg_ap", cfg.apPower);
 }
 
 const char* onOff(bool b) {
@@ -1686,7 +1692,7 @@ const char* onOff(bool b) {
 // Ustawienia sa podzielone na grupy (menu dwupoziomowe)
 #define SET_GROUPS 4
 static const char* const SET_GROUP_NAMES[SET_GROUPS] = { "Reading", "Status line", "Clock", "Power & system" };
-static const uint8_t SET_GROUP_ITEMS[SET_GROUPS] = { 6, 7, 3, 8 };
+static const uint8_t SET_GROUP_ITEMS[SET_GROUPS] = { 6, 7, 3, 9 };
 
 // Teksty pozycji maja co najwyzej UI_CHARS - 2 znakow (przed nimi jest "> ")
 const char* groupItem(int g, int i) {
@@ -1723,10 +1729,10 @@ const char* groupItem(int g, int i) {
     switch (i) {
       case 0: snprintf(b, sizeof(b), "Clock: %s", clockNames[cfg.clockMode % 3]); break;
       case 1: snprintf(b, sizeof(b), "Zone: %s", TZS[cfg.tz % TZ_COUNT].name); break;
-      default: {
+      default: {                                   // OK otwiera reczne ustawianie czasu
         char t[12];
-        if (clockFormat(t, sizeof(t), cfg.clockMode == 2 ? 2 : 1)) snprintf(b, sizeof(b), "Time now: %s", t);
-        else snprintf(b, sizeof(b), "Time: not set");
+        if (clockFormat(t, sizeof(t), cfg.clockMode == 2 ? 2 : 1)) snprintf(b, sizeof(b), "Set time: %s", t);
+        else snprintf(b, sizeof(b), "Set time: not set");
       }
     }
   } else {
@@ -1738,9 +1744,18 @@ const char* groupItem(int g, int i) {
       case 1: snprintf(b, sizeof(b), "Sleep screen: %s", sleepNames[cfg.sleepScreen % 3]); break;
       case 2: snprintf(b, sizeof(b), "Page flip: %s", cfg.fastFlip ? "Fast beta" : "Full"); break;
       case 3: snprintf(b, sizeof(b), "Menu flip: %s", cfg.fastMenu ? "Fast" : "Full"); break;
-      case 4: snprintf(b, sizeof(b), "Menu font: %s", cfg.uiFont == 1 ? "Helvetica" : "Classic"); break;
+      case 4: {
+        static const char* const uiNames[4] = { "Classic", "Helv 14", "Helv 12", "Unifont" };
+        snprintf(b, sizeof(b), "Menu font: %s", uiNames[cfg.uiFont % 4]);
+        break;
+      }
       case 5: snprintf(b, sizeof(b), "Full every: %d pages", fullEveryVals[cfg.fullEvery % 3]); break;
       case 6: snprintf(b, sizeof(b), "Open last book: %s", onOff(cfg.autoOpen)); break;
+      case 7: {
+        static const char* const apNames[3] = { "Low", "Medium", "High" };
+        snprintf(b, sizeof(b), "Hotspot power: %s", apNames[cfg.apPower % 3]);
+        break;
+      }
       default: snprintf(b, sizeof(b), "Hotspot: %s", apPassword().c_str()); break;
     }
   }
@@ -1755,6 +1770,7 @@ int settingsCount() {
   return setGroup < 0 ? SET_GROUPS : SET_GROUP_ITEMS[setGroup];
 }
 
+void goSetTime();                      // (ponizej, po ustawieniach)
 bool settingsFromReader = false;       // wejscie skrotem z ksiazki (dlugie BACK): BACK wraca do ksiazki
 char settingsResumeBook[NAME_LEN];
 
@@ -1811,9 +1827,10 @@ void groupChange(int g, int i) {
       case 1: cfg.sleepScreen = (cfg.sleepScreen + 1) % 3; break;
       case 2: cfg.fastFlip = !cfg.fastFlip; break;
       case 3: cfg.fastMenu = !cfg.fastMenu; break;
-      case 4: cfg.uiFont = cfg.uiFont == 1 ? 0 : 1; break;
+      case 4: cfg.uiFont = (cfg.uiFont == 0) ? 2 : (cfg.uiFont == 2) ? 3 : 0; break;      // Classic -> Helvetica 12 -> Unifont
       case 5: cfg.fullEvery = (cfg.fullEvery + 1) % 3; break;
       case 6: cfg.autoOpen = !cfg.autoOpen; break;
+      case 7: cfg.apPower = (cfg.apPower + 1) % 3; break;
       default: apPasswordNew(); break;       // nowe haslo hotspotu
     }
   }
@@ -1834,6 +1851,9 @@ void onKeySettings(const KeyEvent& e) {
       setTopSel = setSel;
       setGroup = setSel;
       setSel = 0;
+    } else if (setGroup == 2 && setSel == 2) {
+      goSetTime();                           // reczne ustawianie daty i godziny
+      return;
     } else {
       groupChange(setGroup, setSel);
       applyLayout();
@@ -1859,6 +1879,110 @@ void onKeySettings(const KeyEvent& e) {
     } else {
       goMenu();
     }
+  }
+}
+
+// ---------- Reczne ustawienie zegara ----------
+// Pola: 0 rok, 1 miesiac, 2 dzien, 3 godzina, 4 minuta (czas lokalny wybranej strefy).
+// DOWN zwieksza, UP zmniejsza (jak w "Go to page"); OK = nastepne pole; HOME = zapisz; BACK = anuluj.
+int stY = 2026, stMo = 1, stD = 1, stH = 12, stMi = 0, stField = 0;
+
+static int wrapRange(int v, int lo, int hi) {
+  int n = hi - lo + 1;
+  return lo + (((v - lo) % n) + n) % n;
+}
+
+// Wartosci poczatkowe: biezacy czas; gdy zegar nie jest ustawiony - ostatni znany (zapisany) albo data kompilacji
+static void stLoadDefaults() {
+  time_t t = 0;
+  if (clockValid()) t = clockNow();
+  else {
+    uint32_t last = prefs.getUInt("clk_last", 0);
+    if (last > 1700000000UL) t = (time_t)last;
+  }
+  if (t > 0) {
+    struct tm tmv;
+    localtime_r(&t, &tmv);
+    stY = tmv.tm_year + 1900;
+    stMo = tmv.tm_mon + 1;
+    stD = tmv.tm_mday;
+    stH = tmv.tm_hour;
+    stMi = tmv.tm_min;
+  } else {
+    static const char* const MONTHS = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    const char* d = __DATE__;                // np. "Oct 14 2026"
+    stMo = 1;
+    for (int i = 0; i < 12; i++) if (strncmp(d, MONTHS + 3 * i, 3) == 0) stMo = i + 1;
+    stD = atoi(d + 4);
+    stY = atoi(d + 7);
+    stH = atoi(__TIME__);                    // np. "12:50:33"
+    stMi = atoi(__TIME__ + 3);
+  }
+  stY = wrapRange(stY, 2024, 2099);
+  stMo = wrapRange(stMo, 1, 12);
+  int dm = clockDaysInMonth(stY, stMo);
+  if (stD < 1) stD = 1;
+  if (stD > dm) stD = dm;
+}
+
+void drawSetTime() {
+  gfxClear();
+  drawTitle(UI_X, "Set time");
+  char l[16];
+  snprintf(l, sizeof(l), "%04d-%02d-%02d", stY, stMo, stD);
+  gfxText(UI_X, 26, l, 24);
+  snprintf(l, sizeof(l), "%02d:%02d", stH, stMi);
+  gfxText(UI_X, 62, l, 24);
+  static const int fx[5] = { 0, 60, 96, 0, 36 };       // poczatek pola w px (12 px na znak)
+  static const int fw[5] = { 48, 24, 24, 24, 24 };
+  int under = (stField < 3 ? 26 : 62) + 26;
+  gfxHLine(UI_X + fx[stField], UI_X + fx[stField] + fw[stField] - 1, under);        // podkreslenie aktywnego pola
+  gfxHLine(UI_X + fx[stField], UI_X + fx[stField] + fw[stField] - 1, under + 1);
+  char z[28];
+  snprintf(z, sizeof(z), "Zone: %s", TZS[cfg.tz % TZ_COUNT].name);
+  gfxText(UI_X, 98, z, FOOT_SIZE);
+  drawLegend("SAVE", "NEXT", "CANCEL", true);
+  gfxPresent();
+}
+
+void goSetTime() {
+  stLoadDefaults();
+  stField = 3;                               // najczesciej poprawia sie godzine
+  screen = S_SETTIME;
+  drawSetTime();
+}
+
+static void stLeave() {
+  screen = S_SETTINGS;
+  setGroup = 2;
+  setSel = 2;
+  drawSettings();
+}
+
+void onKeySetTime(const KeyEvent& e) {
+  if ((e.key == KEY_UP || e.key == KEY_DOWN) && isStep(e)) {
+    int dir = (e.key == KEY_DOWN) ? 1 : -1;
+    int step = (stField == 4) ? accelStep(e.repeat) : 1;   // minuty: przy przytrzymaniu szybciej
+    if (step > 10) step = 10;
+    switch (stField) {
+      case 0: stY = wrapRange(stY + dir * step, 2024, 2099); break;
+      case 1: stMo = wrapRange(stMo + dir * step, 1, 12); break;
+      case 2: stD = wrapRange(stD + dir * step, 1, clockDaysInMonth(stY, stMo)); break;
+      case 3: stH = wrapRange(stH + dir * step, 0, 23); break;
+      default: stMi = wrapRange(stMi + dir * step, 0, 59); break;
+    }
+    int dm = clockDaysInMonth(stY, stMo);                 // zmiana roku/miesiaca nie moze zostawic nieistniejacego dnia
+    if (stD > dm) stD = dm;
+    drawSetTime();
+  } else if (e.key == KEY_OK && isShort(e)) {
+    stField = (stField + 1) % 5;
+    drawSetTime();
+  } else if (e.key == KEY_HOME && isShort(e)) {          // zapisz
+    clockApplyTz(cfg.tz);
+    if (clockSetLocal(stY, stMo, stD, stH, stMi)) prefs.putUInt("clk_last", (uint32_t)clockNow());
+    stLeave();
+  } else if (e.key == KEY_BACK && isShort(e)) {          // anuluj
+    stLeave();
   }
 }
 
@@ -1931,8 +2055,8 @@ void goInfo() {
   } else {
     snprintf(l3, sizeof(l3), "Battery: not set");
   }
-  char tm[12];
-  if (clockFormat(tm, sizeof(tm), cfg.clockMode == 2 ? 2 : 1)) snprintf(l4, sizeof(l4), "Time: %s", tm);
+  char tm[12], dt[12];
+  if (clockFormat(tm, sizeof(tm), cfg.clockMode == 2 ? 2 : 1) && clockFormatDate(dt, sizeof(dt))) snprintf(l4, sizeof(l4), "Time: %s %s", tm, dt);
   else snprintf(l4, sizeof(l4), "Time: not set");
 
   gfxClear();
@@ -2271,14 +2395,15 @@ void handleConfigGet() {
   h = "<div class='card'><h2>Clock</h2><p class='sub'>The reader has no clock battery: it takes the time from this device every time you open this page. Time survives sleep, not a full power-off.</p>"
       "<label class='f'>Show the time</label><select name='clk'>";
   optTag(h, 0, "Off", cfg.clockMode == 0);
-  optTag(h, 1, "24-hour (14:35)", cfg.clockMode == 1);
-  optTag(h, 2, "12-hour (2:35pm)", cfg.clockMode == 2);
+  optTag(h, 1, "24-hour, e.g. 14:35", cfg.clockMode == 1);
+  optTag(h, 2, "12-hour, e.g. 2:35pm", cfg.clockMode == 2);
   h += "</select>";
   checkTag(h, "clkbook", "Also show it in the book's status line", cfg.clockBook);
   h += "<label class='f'>Time zone</label><select name='tz'>";
   for (int i = 0; i < TZ_COUNT; i++) optTag(h, i, TZS[i].name, cfg.tz == i);
-  char tm[12];
-  if (!clockFormat(tm, sizeof(tm), cfg.clockMode == 2 ? 2 : 1)) snprintf(tm, sizeof(tm), "not set");
+  char tm[32], t1[12], d1[12];
+  if (clockFormat(t1, sizeof(t1), cfg.clockMode == 2 ? 2 : 1) && clockFormatDate(d1, sizeof(d1))) snprintf(tm, sizeof(tm), "%s, %s", t1, d1);
+  else snprintf(tm, sizeof(tm), "not set");
   h += "</select><p class='note'>Time on the reader now: <b id='devtime'>";
   h += tm;
   h += "</b></p></div>";
@@ -2299,8 +2424,13 @@ void handleConfigGet() {
   optTag(h, 1, "Fast (no flash when moving in lists)", cfg.fastMenu);
   optTag(h, 0, "Full refresh", !cfg.fastMenu);
   h += "</select><label class='f'>Menu font</label><select name='uifont'>";
-  optTag(h, 1, "Helvetica (clear letters)", cfg.uiFont == 1);
-  optTag(h, 0, "Classic (pixel font)", cfg.uiFont == 0);
+  optTag(h, 2, "Helvetica 12 (thin)", cfg.uiFont == 2);
+  optTag(h, 3, "Unifont (pixel, wide)", cfg.uiFont == 3);
+  optTag(h, 0, "Classic (pixel, old)", cfg.uiFont == 0);
+  h += "</select><label class='f'>Hotspot power</label><select name='appower'>";
+  optTag(h, 0, "Low (best when the phone or PC is next to the reader)", cfg.apPower == 0);
+  optTag(h, 1, "Medium", cfg.apPower == 1);
+  optTag(h, 2, "High (longer range, needs a strong power source)", cfg.apPower == 2);
   h += "</select></div>";
   server.sendContent(h);
 
@@ -2353,7 +2483,15 @@ void handleConfigPost() {
   if (bm >= 0 && bm <= 2) cfg.batMode = bm;
   cfg.fastFlip = server.arg("flip").toInt() == 1;
   if (server.hasArg("mflip")) cfg.fastMenu = server.arg("mflip").toInt() == 1;
-  if (server.hasArg("uifont")) cfg.uiFont = server.arg("uifont").toInt() == 1 ? 1 : 0;
+  if (server.hasArg("appower")) {
+    int ap = server.arg("appower").toInt();
+    if (ap >= 0 && ap <= 2) cfg.apPower = ap;
+  }
+  if (server.hasArg("uifont")) {
+    int uf = server.arg("uifont").toInt();
+    if (uf == 1) uf = 2;                    // dawne Helvetica 14
+    if (uf >= 0 && uf <= 3) cfg.uiFont = uf;
+  }
   int fe = server.arg("fullev").toInt();
   if (fe >= 0 && fe <= 2) cfg.fullEvery = fe;
   int sl = server.arg("sleep").toInt();
@@ -2377,8 +2515,10 @@ void handleTime() {
     return;
   }
   clockSet((time_t)t);
-  char b[12];
-  if (!clockFormat(b, sizeof(b), cfg.clockMode == 2 ? 2 : 1)) snprintf(b, sizeof(b), "not set");
+  prefs.putUInt("clk_last", (uint32_t)t);                  // domyslna wartosc przy recznym ustawianiu po utracie zasilania
+  char b[32], tm[12], dt[12];
+  if (clockFormat(tm, sizeof(tm), cfg.clockMode == 2 ? 2 : 1) && clockFormatDate(dt, sizeof(dt))) snprintf(b, sizeof(b), "%s, %s", tm, dt);
+  else snprintf(b, sizeof(b), "not set");
   server.send(200, "text/plain", b);
 }
 
@@ -2599,6 +2739,39 @@ void uploadStop() {
 #endif
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_OFF);
+  delay(100);                      // dopiero potem mozna bezpiecznie ponownie wlaczyc WiFi
+}
+
+// Uruchamia hotspot. Czysty start stosu WiFi i do 3 prob zmniejszaja ryzyko, ze siec "czasem sie nie pojawia"
+// (np. przy szybkim ponownym wejsciu w Upload albo chwilowym spadku napiecia).
+static bool apStart(const char* ssid, const char* pass) {
+  WiFi.persistent(false);                     // nie zapisuj ustawien WiFi we flash
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(150);
+    WiFi.mode(WIFI_AP);
+    delay(50);
+    WiFi.setSleep(false);
+    if (WiFi.softAP(ssid, pass, AP_CHANNEL, 0, 4)) {                       // widoczna, do 4 klientow
+      String ip = WiFi.softAPIP().toString();
+      if (ip != "0.0.0.0") {
+        // Mala moc nadawania: urzadzenie stoi zwykle tuz obok telefonu/komputera, a pelna moc z bliska
+        // przesterowuje odbiornik (siec bywa wtedy widoczna jako "Hidden network") i obciaza zasilanie.
+        static const wifi_power_t apPowerVals[3] = { WIFI_POWER_8_5dBm, WIFI_POWER_13dBm, WIFI_POWER_19_5dBm };
+        WiFi.setTxPower(apPowerVals[cfg.apPower % 3]);
+        Serial.printf("hotspot OK (proba %d): kanal %d, moc %d, wolna pamiec %u B\n", attempt, AP_CHANNEL, cfg.apPower, (unsigned)ESP.getFreeHeap());
+        wifi_config_t wc;
+        if (esp_wifi_get_config(WIFI_IF_AP, &wc) == ESP_OK) {          // diagnostyka: czy siec na pewno jest widoczna i szyfrowana
+          Serial.printf("AP: ssid_len=%d ukryta=%d authmode=%d kanal=%d\n", (int)wc.ap.ssid_len, (int)wc.ap.ssid_hidden, (int)wc.ap.authmode, (int)wc.ap.channel);
+        }
+        return true;
+      }
+    }
+    Serial.printf("hotspot: proba %d nieudana\n", attempt);
+  }
+  WiFi.mode(WIFI_OFF);
+  return false;
 }
 
 void goUpload() {
@@ -2610,9 +2783,7 @@ void goUpload() {
   apSsid(ssid, sizeof(ssid));
   String pass = apPassword();
 
-  WiFi.mode(WIFI_AP);
-  if (!WiFi.softAP(ssid, pass.c_str(), AP_CHANNEL, 0, 4)) {   // widoczna, do 4 klientow
-    WiFi.mode(WIFI_OFF);
+  if (!apStart(ssid, pass.c_str())) {
     showMessage("Hotspot error", "Try again");
     delay(2000);
     goMenu();
@@ -2722,6 +2893,7 @@ void onKeyReader(const KeyEvent& e) {
 unsigned long lastActivityMs = 0;
 
 void goSleep() {
+  if (clockValid()) prefs.putUInt("clk_last", (uint32_t)clockNow());   // domyslna wartosc przy recznym ustawianiu po utracie zasilania
   Serial.println("sleep");
   statsFlush();              // dolicz czas czytania (tylko, gdy czytamy) i zapisz statystyki
   saveBookmark();            // bezpieczne takze poza czytnikiem (ma zabezpieczenia)
@@ -2845,6 +3017,7 @@ void loop() {
       break;
     case S_GOTO: onKeyGoto(e); break;
     case S_SETTINGS: onKeySettings(e); break;
+    case S_SETTIME: onKeySetTime(e); break;
   }
   lastActivityMs = millis();
 }

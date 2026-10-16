@@ -89,15 +89,20 @@ int main(){
 
 
   SECTION("T42 czcionka menu: zadna pozycja nie wchodzi pod legende");
-  { cfg=Settings{FAM_CLASSIC,1,false,true,true,false,true,1,false,1,1,0,true,0,0,false,0,false,0,true,1}; applyLayout(); prefs.s.erase("last"); int worst=0, bad=0, n=0;
-    for(int g=0; g<SET_GROUPS; g++){ for(int i=0;i<SET_GROUP_ITEMS[g];i++){ setGroup=g; setSel=i; screen=S_SETTINGS; drawSettings(); int ov=inkIn(SCREEN_W-TAG_COL_W-1,16,SCREEN_W-TAG_COL_W+3,106); n++; if(ov>0) bad++; int rows=inkIn(UI_X+16,16,SCREEN_W-TAG_COL_W-3,112); if(rows>worst) worst=rows; } }
-    printf("  %d pozycji ustawien w Helvetice, pod legende wchodzi: %d\n",n,bad); CHECK(bad==0);
-    // ksiazka z dlugim tytulem w bibliotece
-    writeFile("Bardzo_dluga_nazwa_ksiazki_ktora_nie_miesci_sie_w_wierszu_menu_aaaaaaaaaaaaaaaaaa.txt","x"); scanBooks(); goLibrary(); CHECK(inkIn(SCREEN_W-TAG_COL_W-1,16,SCREEN_W-TAG_COL_W+3,106)==0); printf("  biblioteka: dluga nazwa ucieta przed legenda\n");
-    // wylaczenie Helvetiki wraca do Classic
-    cfg.uiFont=0; goMenu(); int c0=inkIn(UI_X+16,16,200,31); cfg.uiFont=1; goMenu(); int c1=inkIn(UI_X+16,16,200,31); CHECK(c0>20 && c1>20 && c0!=c1); setGroup=-1;
+  { writeFile("Bardzo_dluga_nazwa_ksiazki_ktora_nie_miesci_sie_w_wierszu_menu_aaaaaaaaaaaaaaaaaa.txt","x"); scanBooks(); prefs.s.erase("last");
+    const char* names[4]={"Classic","(brak)","Helv 12","Unifont"}; const int modes[3]={0,2,3};
+    for(int mi=0;mi<3;mi++){ int mode=modes[mi]; cfg=Settings{FAM_CLASSIC,1,false,true,true,false,true,1,false,1,1,0,true,0,0,false,0,false,0,true,(uint8_t)mode}; applyLayout(); int bad=0,n=0;
+      for(int g=0; g<SET_GROUPS; g++){ for(int i=0;i<SET_GROUP_ITEMS[g];i++){ setGroup=g; setSel=i; screen=S_SETTINGS; drawSettings(); int ov=inkIn(SCREEN_W-TAG_COL_W-1,16,SCREEN_W-TAG_COL_W+3,106); n++; if(ov>0) bad++; } }
+      goLibrary(); int libOv=inkIn(SCREEN_W-TAG_COL_W-1,16,SCREEN_W-TAG_COL_W+3,106); menuSel=0; goMenu(); int first=inkIn(UI_X+16,16,200,31);
+      printf("  %-8s: %d pozycji ustawien pod legende wchodzi: %d, biblioteka z dluga nazwa: %d, menu - pierwsza pozycja %d px\n",names[mode],n,bad,libOv,first); CHECK(bad==0 && libOv==0 && first>20); setGroup=-1; }
+    // rozne tryby daja rozne rysunki
+    int ink[4]={0,0,0,0}; for(int mi=0;mi<3;mi++){ cfg.uiFont=modes[mi]; menuSel=0; goMenu(); ink[modes[mi]]=inkIn(UI_X+16,16,200,31); } CHECK(ink[0]!=ink[2] && ink[2]!=ink[3] && ink[0]!=ink[3]);
     // strona WWW i zapis
-    g_lastBody.clear(); g_args.clear(); handleConfigGet(); CHECK(g_lastBody.find("name='uifont'")!=std::string::npos && g_lastBody.find("Helvetica (clear letters)")!=std::string::npos);
-    g_args.clear(); g_args["uifont"]="0"; handleConfigPost(); CHECK(cfg.uiFont==0 && prefs.u["cfg_uf"]==0); g_args["uifont"]="1"; handleConfigPost(); CHECK(cfg.uiFont==1 && prefs.u["cfg_uf"]==1); g_args["uifont"]="9"; handleConfigPost(); CHECK(cfg.uiFont==0); printf("  strona WWW: Menu font\n"); cfg.uiFont=1; }
+    cfg.uiFont=2; g_lastBody.clear(); g_args.clear(); handleConfigGet(); CHECK(g_lastBody.find("name='uifont'")!=std::string::npos && g_lastBody.find("Helvetica 12 (thin)")!=std::string::npos && g_lastBody.find("Unifont (pixel, wide)")!=std::string::npos);
+    g_args.clear(); g_args["uifont"]="3"; handleConfigPost(); CHECK(cfg.uiFont==3 && prefs.u["cfg_uf"]==3); g_args["uifont"]="0"; handleConfigPost(); CHECK(cfg.uiFont==0); g_args["uifont"]="9"; handleConfigPost(); CHECK(cfg.uiFont==0); g_args["uifont"]="1"; handleConfigPost(); CHECK(cfg.uiFont==2); g_args["uifont"]="2"; handleConfigPost(); CHECK(cfg.uiFont==2);
+    CHECK(g_lastBody.find("Helvetica 14")==std::string::npos); g_lastBody.clear(); g_args.clear(); handleConfigGet(); CHECK(g_lastBody.find("name='appower'")!=std::string::npos && g_lastBody.find("Low (best when")!=std::string::npos); g_args.clear(); g_args["appower"]="2"; handleConfigPost(); CHECK(cfg.apPower==2 && prefs.u["cfg_ap"]==2); g_args["appower"]="7"; handleConfigPost(); CHECK(cfg.apPower==2); g_args["appower"]="0"; handleConfigPost(); CHECK(cfg.apPower==0); cfg.apPower=1;
+    // zapisane dawne "Helvetica 14" (1) jest przeksztalcane na Helvetica 12; nieprawidlowe wartosci naprawiane
+    cfg.uiFont=1; applyLayout(); CHECK(cfg.uiFont==2); cfg.uiFont=9; cfg.apPower=9; applyLayout(); CHECK(cfg.uiFont==0 && cfg.apPower==1); cfg.uiFont=2;
+    printf("  strona WWW: Menu font (4 opcje, bledne wartosci ignorowane)\n"); cfg.uiFont=2; }
 
   printf("\n==== TESTY MENU, SKROTOW I ODSTEPOW: %d OK, %d bledow ====\n",passN,failN); return failN?1:0; }

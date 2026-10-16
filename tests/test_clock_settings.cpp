@@ -76,4 +76,44 @@ int main(){
     uint32_t sg[4]; cfg=Settings{FAM_HELV,1,false,true,true,false,true,1,false,1,1,0,true,0,0,false,0,false,0}; applyLayout(); sg[0]=layoutSig(); cfg.lineGap=1; applyLayout(); sg[1]=layoutSig(); cfg.lineGap=0; cfg.hyphen=true; applyLayout(); sg[2]=layoutSig(); cfg.hyphen=false; cfg.famIdx=3; applyLayout(); sg[3]=layoutSig();
     CHECK(sg[0]!=sg[1] && sg[0]!=sg[2] && sg[0]!=sg[3] && sg[1]!=sg[2]); printf("  podpis ukladu zmienia sie przy interlinii, dzieleniu i rodzinie czcionki\n"); }
 
+
+  SECTION("T43 reczne ustawianie daty i godziny");
+  { clockSetHook=[](time_t t){ g_fake=t; }; clockApplyTz(0); prefs.u.erase("clk_last"); g_fake=SUMMER;
+    cfg=Settings{FAM_CLASSIC,1,false,true,true,false,true,1,false,1,1,0,true,0,0,false,0,false,0,true,0};
+    KeyEvent ok{KEY_OK,EV_SHORT,0}, dn{KEY_DOWN,EV_PRESS,0}, up{KEY_UP,EV_PRESS,0}, save{KEY_HOME,EV_SHORT,0}, cancel{KEY_BACK,EV_SHORT,0};
+    setTopSel=2; setGroup=2; setSel=2; screen=S_SETTINGS; CHECK(strstr(settingsItem(2),"Set time: 14:35")!=nullptr); CHECK(strlen(settingsItem(2))<=(size_t)(UI_CHARS-2));
+    onKeySettings(ok); CHECK(screen==S_SETTIME && stField==3);
+    printf("  start: %04d-%02d-%02d %02d:%02d (aktualny czas lokalny)\n",stY,stMo,stD,stH,stMi); CHECK(stY==2026&&stMo==10&&stD==13&&stH==14&&stMi==35);
+    // godzina: UP x2 -> 12, minuta: DOWN x15 -> 50
+    onKeySetTime(up); onKeySetTime(up); CHECK(stH==12); onKeySetTime(ok); CHECK(stField==4); for(int i=0;i<15;i++) onKeySetTime(dn); CHECK(stMi==50);
+    // dzien 31 pazdziernika, potem miesiac -> listopad: dzien przycina sie do 30
+    onKeySetTime(ok); CHECK(stField==0); onKeySetTime(ok); CHECK(stField==1); onKeySetTime(ok); CHECK(stField==2); for(int i=0;i<18;i++) onKeySetTime(dn); CHECK(stD==31);
+    for(int i=0;i<4;i++) onKeySetTime(ok); CHECK(stField==1); onKeySetTime(dn); CHECK(stMo==11 && stD==30); printf("  31 pazdz. -> miesiac listopad: dzien przyciety do %d\n",stD);
+    // zapis
+    onKeySetTime(save); CHECK(screen==S_SETTINGS && setGroup==2 && setSel==2); printf("  zapis: epoch %ld (oczekiwane 1796039400 = 2026-11-30 12:50 CET)\n",(long)g_fake); CHECK(g_fake==1796039400);
+    char b[16],d[16]; CHECK(clockFormat(b,sizeof b,1) && strcmp(b,"12:50")==0 && clockFormatDate(d,sizeof d) && strcmp(d,"2026-11-30")==0); CHECK(prefs.u["clk_last"]==1796039400u);
+    // anulowanie nie zmienia czasu
+    time_t before=g_fake; setGroup=2; setSel=2; onKeySettings(ok); onKeySetTime(dn); onKeySetTime(cancel); CHECK(g_fake==before && screen==S_SETTINGS); printf("  anulowanie: czas bez zmian\n");
+    // zawijanie roku i dni, luty w roku przestepnym
+    setGroup=2; setSel=2; onKeySettings(ok); stY=2099; stField=0; onKeySetTime(dn); CHECK(stY==2024); onKeySetTime(up); CHECK(stY==2099);
+    stY=2028; stMo=2; stD=29; CHECK(clockDaysInMonth(2028,2)==29 && clockDaysInMonth(2027,2)==28 && clockDaysInMonth(2100,2)==28 && clockDaysInMonth(2000,2)==29);
+    stField=0; onKeySetTime(dn); CHECK(stY==2029 && stD==28); printf("  29 lut. 2028 -> rok 2029: dzien przyciety do %d\n",stD); onKeySetTime(cancel);
+    // czas letni: 1 lipca 12:50 w strefie Central Europe = 10:50 UTC
+    clockApplyTz(0); CHECK(clockSetLocal(2026,7,1,12,50) && g_fake==1782903000); clockApplyTz(5); CHECK(clockSetLocal(2026,7,1,12,50) && g_fake==1782903000+6*3600); clockApplyTz(0);   // US Eastern (EDT, UTC-4): 16:50 UTC
+    CHECK(!clockSetLocal(1999,1,1,0,0)); printf("  czas letni i inna strefa przeliczane poprawnie\n");
+    // wartosci poczatkowe przy nieustawionym zegarze: ostatni znany czas, w koncu data kompilacji
+    g_fake=0; prefs.u["clk_last"]=(uint32_t)WINTER; setGroup=2; setSel=2; onKeySettings(ok); printf("  zegar nieustawiony, zapisany czas: %04d-%02d-%02d %02d:%02d\n",stY,stMo,stD,stH,stMi); CHECK(stY==2026&&stMo==12&&stD==15&&stH==14&&stMi==35); onKeySetTime(cancel);
+    prefs.u.erase("clk_last"); setGroup=2; setSel=2; onKeySettings(ok); static const char* mn="JanFebMarAprMayJunJulAugSepOctNovDec"; int cm=1; for(int i=0;i<12;i++) if(strncmp(__DATE__,mn+3*i,3)==0) cm=i+1;
+    printf("  zegar nieustawiony, brak zapisu: %04d-%02d-%02d (data kompilacji %s)\n",stY,stMo,stD,__DATE__); CHECK(stY==atoi(__DATE__+7) && stMo==cm && stD==atoi(__DATE__+4)); onKeySetTime(cancel);
+    CHECK(strstr(settingsItem(2),"Set time: not set")!=nullptr);
+    // wyglad: podkreslenie aktywnego pola przesuwa sie
+    g_fake=SUMMER; setGroup=2; setSel=2; onKeySettings(ok); stField=0; drawSetTime(); int u0=inkIn(UI_X,52,UI_X+47,53), u3=inkIn(UI_X,88,UI_X+23,89), u0b=inkIn(UI_X+60,52,UI_X+83,53); stField=3; drawSetTime(); int u3b=inkIn(UI_X,88,UI_X+23,89), u0c=inkIn(UI_X,52,UI_X+47,53);
+    printf("  podkreslenie: pole roku %d px, godzina bez zaznaczenia %d, po zaznaczeniu %d\n",u0,u3,u3b); CHECK(u0>=90 && u3<10 && u3b>=45 && u0c<10 && inkIn(SCREEN_W-46,0,SCREEN_W-1,14)>40);
+    CHECK(inkIn(SCREEN_W-46-1,16,SCREEN_W-46+3,106)==0); onKeySetTime(cancel);
+    // Info z data, miesci sie przed legenda (takze 12h)
+    g_fake=SUMMER; for(int m=1;m<=2;m++){ cfg.clockMode=m; goInfo(); CHECK(inkIn(SCREEN_W-46-1,56,SCREEN_W-46+3,74)==0 && inkIn(0,56,200,74)>0); } cfg.clockMode=0;
+    // strona WWW: przyklady formatow i czas z data
+    g_lastBody.clear(); g_args.clear(); handleConfigGet(); CHECK(g_lastBody.find("24-hour, e.g. 14:35")!=std::string::npos && g_lastBody.find("12-hour, e.g. 2:35pm")!=std::string::npos && g_lastBody.find("14:35, 2026-10-13")!=std::string::npos);
+    g_args.clear(); g_args["t"]="1791894900"; handleTime(); printf("  /time odpowiada: '%s'\n",g_lastBody.c_str()); CHECK(g_lastCode==200 && g_lastBody=="14:35, 2026-10-13"); clockSetHook=nullptr; }
+
   printf("\n==== TESTY ZEGARA I USTAWIEN: %d OK, %d bledow ====\n",passN,failN); return failN?1:0; }

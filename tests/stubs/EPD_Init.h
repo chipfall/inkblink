@@ -5,7 +5,7 @@
 
 #define USE_HORIZONTIAL 2
 #define EPD_W 250
-#define EPD_H 122
+#define EPD_H 128        // RAM width of the panel (visible rows: 122), as in the real driver for orientation 2
 #define ALLSCREEN_BYTES (((EPD_H % 8) ? (EPD_H / 8 + 1) : (EPD_H / 8)) * EPD_W)
 #define WHITE 0xFF
 #define BLACK 0x00

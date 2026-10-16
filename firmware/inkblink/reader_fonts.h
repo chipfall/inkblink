@@ -273,20 +273,24 @@ inline int fontCharW(uint32_t cp) {
 // Rysuje 'len' bajtow UTF-8 w jednym wierszu; rowTop = gorna krawedz wiersza
 // (juz z odstepem fontTopPad), x od LEWEJ krawedzi.
 #if USE_U8G2
-// Tekst interfejsu (menu, listy, naglowki) w Helvetice 14 px: wyrazne "l" (w Classic wyglada jak "1")
-// i prawdziwy bold. y = gorna krawedz wiersza (jak w gfxText). Zwraca szerokosc napisu w px.
-inline void uiSetHelv(bool bold) {
-  u8g2.setFont(bold ? u8g2_font_helvB14_te : u8g2_font_helvR14_te);
+// Tekst interfejsu (menu, listy, naglowki). Tryby (ustawienie "Menu font"):
+//   1 = Helvetica 14, 2 = Helvetica 12 (cienszy), 3 = Unifont 16 (stala szerokosc 8 px).
+// Wyrazne "l" (w Classic wyglada jak "1"); w trybach Helvetica prawdziwy bold. Unifont nie ma boldu.
+// y = gorna krawedz wiersza (jak w gfxText).
+inline void uiSetFont(int mode, bool bold) {
+  if (mode == 2) u8g2.setFont(bold ? u8g2_font_helvB12_te : u8g2_font_helvR12_te);
+  else if (mode == 3) u8g2.setFont(u8g2_font_unifont_t_polish);
+  else u8g2.setFont(bold ? u8g2_font_helvB14_te : u8g2_font_helvR14_te);
   u8g2.setFontMode(1);
   u8g2.setFontDirection(0);
   u8g2.setForegroundColor(1);
 }
-inline int uiWidthHelv(const char* s, bool bold) {
-  uiSetHelv(bold);
+inline int uiWidth(int mode, const char* s, bool bold) {
+  uiSetFont(mode, bold);
   return u8g2.getUTF8Width(s);
 }
-inline int uiTextHelv(int x, int y, const char* s, bool bold) {
-  uiSetHelv(bold);
+inline int uiText(int mode, int x, int y, const char* s, bool bold) {
+  uiSetFont(mode, bold);
   u8g2.drawUTF8(x, y + u8g2.getFontAscent() + 1, s);
   return u8g2.getUTF8Width(s);
 }

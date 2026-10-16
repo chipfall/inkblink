@@ -8,6 +8,8 @@ bool g_authOk=true; int g_lastCode=0; std::string g_lastBody,g_lastLoc; int g_au
 bool g_dnsUp=false; std::string g_uri;
 
 bool g_apFail=false;
+int g_apFailFirst=0;
+int g_txPower=0;
 
 int g_stations=0; int g_onEventCalls=0;
 

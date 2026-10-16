@@ -21,13 +21,16 @@ InkBlink's own code is MIT-licensed (see `LICENSE`). It builds on, and is used t
 
 - **GNU Unifont** (`u8g2_font_unifont_t_polish`): dual-licensed under the **GNU GPL 2 or later with the GNU Font Embedding Exception** and the **SIL Open Font License 1.1** (since Unifont 13.0.04). The Unifont project states that the exception and the OFL allow use with non-GPL software. Source: https://unifoundry.com/unifont/
 
-- **"Classic" font family** (Classic 12 / 16 px in the font menu) uses the bitmap font data of the manufacturer's driver (`EPDfont.h`) - see the next section.
+- **"Classic" font family** (Classic 12 / 16 px in the font menu) uses the bitmap font data of the manufacturer's driver (`EPDfont.h`) - see the next section (included with Elecrow's permission).
 
-## Manufacturer's driver code (Elecrow) - NOT included, permission pending
+## Manufacturer's driver code (Elecrow) - included with permission
 
-The e-paper driver used on the CrowPanel (`EPD.cpp`, `EPD.h`, `EPDfont.h`, `spi.cpp`, `spi.h`, `EPD_Init.cpp`, `EPD_Init.h`) comes from Elecrow's public repository for this board (https://github.com/Elecrow-RD/CrowPanel-ESP32-2.13-E-paper-HMI-Display-with-122-250). At the time of writing that repository contains no LICENSE file, so redistribution rights are unclear. These files are therefore listed in `.gitignore` and must be provided locally (see `firmware/inkblink/driver/README.md`). `EPD_Init.cpp`/`EPD_Init.h` in particular are modified (initialisation for the JD79661 controller of hardware V1.2, a fast partial-refresh routine).
+`firmware/inkblink/` contains the e-paper driver of the CrowPanel board: `EPD.cpp`, `EPD.h`, `EPDfont.h`, `spi.cpp`, `spi.h` (unchanged copies) and `EPD_Init.cpp`, `EPD_Init.h` (modified). The origin is Elecrow's public repository for this board (https://github.com/Elecrow-RD/CrowPanel-ESP32-2.13-E-paper-HMI-Display-with-122-250). `EPDfont.h` is also the source of the bitmap data of the "Classic" font family.
 
-Status: permission requested from Elecrow. Once it is granted (or replaced by independent code), update this section, `.gitignore` and the driver README.
+- **Permission:** the repository carries no LICENSE file and the files have no license headers. We asked Elecrow in writing whether the driver files may be included in this public repository and received the answer (e-mail from Elecrow support, October 2026): *"Yes, you can include in your public repository the driver files."* We asked which license applies to the files and whether a LICENSE file could be added; the reply only said the feedback would be passed on to the relevant departments, so **no license text exists**.
+- **What that means:** these files stay the property of Elecrow and are **not** covered by this project's MIT license. They are published here with Elecrow's permission, for use with the CrowPanel hardware. The permission as we received it mentions the repository only; it does not explicitly mention compiled binaries, pre-flashed devices or other commercial use. If you intend those, ask Elecrow for explicit permission first.
+- **Modifications:** `EPD_Init.cpp` / `EPD_Init.h` were changed for hardware V1.2 (JD79661 initialisation, `EPD_DisplayImageFast()` for partial refresh). They carry a header comment saying so.
+- The original e-mail is kept by the project owner.
 
 ## Manufacturer's CAD data
 

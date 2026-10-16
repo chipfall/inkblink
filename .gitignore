@@ -8,17 +8,6 @@ tests/build/
 .DS_Store
 Thumbs.db
 
-# Elecrow driver files: NOT part of this repository until Elecrow has granted permission.
-# Keep them locally next to the sketch (see firmware/inkblink/driver/README.md).
-# Remove these lines once the files may be redistributed.
-firmware/inkblink/EPD.cpp
-firmware/inkblink/EPD.h
-firmware/inkblink/EPDfont.h
-firmware/inkblink/EPD_Init.cpp
-firmware/inkblink/EPD_Init.h
-firmware/inkblink/spi.cpp
-firmware/inkblink/spi.h
-
 # manufacturer CAD/PCB files (license unclear)
 *.stp
 *.step

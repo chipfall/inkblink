@@ -15,7 +15,7 @@
 | `webui_assets.h` | HTML/CSS/JS of the web interface (PROGMEM) |
 | `partitions.csv` | 2 MB app + about 5.9 MB LittleFS |
 
-The e-paper driver files are provided locally (see `driver/README.md`).
+The e-paper driver files (Elecrow's code, one part modified) sit in the same folder; see `driver/README.md` and `THIRD_PARTY_NOTICES.md`.
 
 ## Concepts worth knowing
 
@@ -35,7 +35,7 @@ Create a `board_<name>.h` that provides the same interface as `board_crowpanel.h
 
 ```sh
 make -C tests test          # C++ host tests + JavaScript tests
-make -C tests test-driver   # also tests that need the real Elecrow driver files
+make -C tests test-driver   # also the tests that need the real driver files (part of the repository)
 ```
 
 - The firmware sources are compiled unchanged with g++ against stand-ins in `tests/stubs/` (Arduino, WiFi, WebServer, LittleFS, Preferences, DNS, U8g2, e-paper driver). `tests/common.cpp` holds the shared mock state; each `test_*.cpp` includes `inkblink.ino` and drives the firmware functions directly.
@@ -43,6 +43,17 @@ make -C tests test-driver   # also tests that need the real Elecrow driver files
 - What the tests do **not** cover: real display output, SPI timing, WiFi/captive portal behaviour on phones, deep sleep and wake-up, battery ADC, clock drift, flash wear, and the real U8g2 glyph bitmaps. Check those on the device.
 - EPUB tests build small synthetic EPUB files (`tools/epub/make_samples.py`), not commercial books.
 - Output images of some tests are written to `tests/build/run/png/` as raw 250 x 122 bitmaps for inspection.
+
+## Versioning and releases
+
+- Versions are `MAJOR.MINOR.PATCH` (patch = bug fixes, minor = new features, `1.0.0` = considered stable).
+- Between releases `FW_VERSION` (in `inkblink.ino`) carries a `-dev` suffix, for example `0.9.1-dev`. The on-device Info screen shows it, so a bug report always says which build it came from.
+- Do **not** bump the version on every commit. Bump it when a build has been tested on the device and is worth keeping:
+  1. change `FW_VERSION` to the plain number (`0.9.1`) and rename the top `CHANGELOG.md` heading to it, with the date;
+  2. commit ("Release 0.9.1"), then `git tag v0.9.1` and `git push --tags`;
+  3. set the next work-in-progress version (`0.9.2-dev` or `0.10.0-dev`) and add a new heading at the top of the changelog.
+- `tests/check_version.py` (part of `make test`) verifies that `FW_VERSION` is well formed and equals the newest `CHANGELOG.md` heading.
+- Release binaries contain the manufacturer's driver code. Elecrow's permission as received covers including the files in this repository; it does not explicitly mention compiled binaries or commercial use (see `THIRD_PARTY_NOTICES.md`), so ask Elecrow before selling pre-flashed devices.
 
 ## Code language
 

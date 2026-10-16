@@ -3,8 +3,8 @@
 # so no hardware and no Elecrow driver files are needed.
 #
 #   make test          run everything that does not need the real driver
-#   make test-driver   also run the tests that need Elecrow's driver files
-#                      (copy them into firmware/inkblink/ first, see firmware/inkblink/driver/README.md)
+#   make test-driver   also run the tests that need the real e-paper driver files
+#                      (they are part of the repository, see firmware/inkblink/driver/README.md)
 #   make clean
 #
 # Needs: g++ (C++17), python3, node >= 18.
@@ -23,8 +23,8 @@ CPP_TESTS := test_core test_ui_features test_fonts_margins test_clock_settings \
              test_hyphenation_layout test_toc_chapters test_glyph_widths \
              test_battery test_menu_shortcuts test_arduino_prototypes test_no_u8g2
 
-.PHONY: test test-cpp test-js test-driver clean dirs fixtures
-test: test-cpp test-js
+.PHONY: test test-cpp test-js test-meta test-driver clean dirs fixtures
+test: test-cpp test-js test-meta
 	@echo; echo "ALL TESTS PASSED"
 
 dirs:
@@ -73,9 +73,12 @@ test-js: dirs fixtures
 	@node ../tools/epub/test_epub.mjs $(B)/samples | tail -1
 	@node ../tools/epub/test_books_page.mjs $(B)/samples | tail -1
 
+test-meta:
+	@python3 check_version.py
+
 # --- tests that need the real Elecrow driver files in firmware/inkblink/ ---
 test-driver: dirs fixtures
-	@for f in $(ELECROW); do test -f $(SK)/$$f || { echo "missing $(SK)/$$f - see firmware/inkblink/driver/README.md"; exit 1; }; done
+	@for f in $(ELECROW); do test -f $(SK)/$$f || { echo "missing driver file $(SK)/$$f - see firmware/inkblink/driver/README.md"; exit 1; }; done
 	@rm -rf $(B)/sketch_real; mkdir -p $(B)/sketch_real; cp $(SK)/*.ino $(SK)/*.h $(SK)/*.cpp $(B)/sketch_real/
 	$(CXX) $(CXXFLAGS) -Idriver -I$(B)/sketch_real -Istubs driver/test_fast_refresh.cpp common.cpp driver/spi_trace.cpp $(B)/sketch_real/EPD.cpp $(B)/sketch_real/EPD_Init.cpp -o $(B)/test_fast_refresh
 	$(CXX) $(CXXFLAGS) -Idriver -I$(B)/sketch_real -Istubs test_menu_shortcuts.cpp common.cpp driver/spi_trace.cpp $(B)/sketch_real/EPD.cpp $(B)/sketch_real/EPD_Init.cpp -o $(B)/test_menu_shortcuts_driver

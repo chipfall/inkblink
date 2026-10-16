@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.9.0 (in development)
+Versions are `MAJOR.MINOR.PATCH`. A `-dev` suffix marks work in progress; it is dropped when a release is tagged (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
+
+## 0.9.1-dev (unreleased)
+
+- Menu and screen titles in a clearer font (setting *Menu font*: Helvetica 12 / Unifont / Classic; default Helvetica 12): a distinct "l", fixes the broken "M" and "W" in bold Classic titles
+- Elecrow's driver files are now part of the repository (with Elecrow's permission); CI also runs the driver-dependent tests
+- Hotspot start hardened: clean WiFi restart before every start, up to 3 attempts, selectable transmit power (setting *Hotspot power*, default Medium) and AP configuration details on the serial monitor
+- Manual date and time setting (Settings -> Clock -> Set time); date shown on the Info screen and in the web page; clearer format examples in the web page
+
+## 0.9.0 (2026-10-14, initial import)
 
 First tracked version of InkBlink (before: private prototype versions 0.1 - 0.8).
 
@@ -15,5 +24,4 @@ First tracked version of InkBlink (before: private prototype versions 0.1 - 0.8)
 - Battery indicator (pin setup required), pin finder on the Info screen
 - Fast partial refresh for page flips (beta) and flash-free menu navigation
 - Shortcuts: long BACK in the book opens the Reading settings, BACK in the menu returns to the book
-- Menu and screen titles in Helvetica (setting *Menu font*: Helvetica / Classic); clear "l", real bold titles
 - Host test suite (C++ and JavaScript), EPUB tools

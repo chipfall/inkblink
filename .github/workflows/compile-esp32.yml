@@ -1,0 +1,23 @@
+name: compile-esp32
+
+# Compiles the sketch for the ESP32-S3 with arduino-cli. Run it by hand from the Actions tab
+# (Run workflow). NOTE: written without being able to run it; if the first run fails on a
+# board option or a library name, adjust the FQBN / install lines below.
+on:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install the ESP32 core and libraries
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib install "Adafruit GFX Library" "U8g2_for_Adafruit_GFX"
+      - name: Compile
+        run: arduino-cli compile --fqbn esp32:esp32:esp32s3:FlashSize=8M,PSRAM=opi,CDCOnBoot=default firmware/inkblink

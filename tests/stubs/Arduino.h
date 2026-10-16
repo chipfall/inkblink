@@ -51,7 +51,7 @@ struct SerialT { void begin(int){} void println(const char* x){ if(getenv("VERBO
   int printf(const char* f,...) __attribute__((format(printf,2,3))) { if(!getenv("VERBOSE")) return 0; va_list a; va_start(a,f); printf("[serial] "); int r=vprintf(f,a); va_end(a); return r; } };
 extern SerialT Serial;
 
-struct EspClass { uint64_t getEfuseMac(){ return 0x0000A1B2C3D4E5F6ULL & 0xFFFFFFFFFFFFULL; } };
+struct EspClass { uint64_t getEfuseMac(){ return 0x0000A1B2C3D4E5F6ULL & 0xFFFFFFFFFFFFULL; } uint32_t getFreeHeap(){ return 200000; } };
 static EspClass ESP;
 
 #define ADC_11db 3
