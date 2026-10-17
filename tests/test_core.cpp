@@ -211,7 +211,8 @@ int main(){
     setSel=4; onKeySettings(ok); CHECK(cfg.uiFont==2 && strstr(settingsItem(4),"Helv 12")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==3 && strstr(settingsItem(4),"Unifont")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==0 && strstr(settingsItem(4),"Classic")!=nullptr);
     setSel=5; onKeySettings(ok); CHECK(cfg.fullEvery==2); onKeySettings(ok); CHECK(cfg.fullEvery==0);
     setSel=7; onKeySettings(ok); CHECK(cfg.apPower==1 && strstr(settingsItem(7),"Medium")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==2 && strstr(settingsItem(7),"High")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==0 && strstr(settingsItem(7),"Low")!=nullptr);
-    setSel=8; onKeySettings(ok); CHECK(strncmp(settingsItem(8),"Hotspot: ",9)==0);
+    setSel=8; onKeySettings(ok); CHECK(cfg.powerSave==1 && strstr(settingsItem(8),"CPU 80")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==2 && strstr(settingsItem(8),"Light")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==0 && strstr(settingsItem(8),"Off")!=nullptr);
+    setSel=9; onKeySettings(ok); CHECK(strncmp(settingsItem(9),"Hotspot: ",9)==0);
     setSel=settingsCount()-1; onKeySettings(dn); CHECK(setSel==0); onKeySettings(up); CHECK(setSel==settingsCount()-1);
     KeyEvent hm{KEY_HOME,EV_SHORT,0}; onKeySettings(hm); CHECK(screen==S_SETTINGS && setGroup==3); printf("  HOME w ustawieniach nic nie robi\n");
     onKeySettings(bk); CHECK(setGroup==-1); onKeySettings(bk); CHECK(screen==S_MENU); CHECK(prefs.u["cfg_bd"]==1 && prefs.u["cfg_cb"]==1); printf("  BACK: z grupy na liste, z listy do menu; ustawienia zapisane\n");

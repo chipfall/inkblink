@@ -133,6 +133,16 @@ inline int boardPinMv(int pin) {
 
 // Gleboki sen: ekran e-papierowy zachowuje ostatni obraz bez zasilania.
 // Budzik: przycisk PIN_WAKE (stan niski). Po wybudzeniu program startuje od nowa.
+// Lekkie uspienie na czas bezczynnosci (ms): procesor stoi, pamiec zostaje, wybudzenie dowolnym
+// przyciskiem (stan niski) albo po uplywie czasu. Nie uzywac przy wlaczonym WiFi (hotspot).
+inline void boardLightSleep(uint32_t ms) {
+  static const int pins[5] = { PIN_KEY_HOME, PIN_KEY_BACK, PIN_KEY_UP, PIN_KEY_DOWN, PIN_KEY_OK };
+  for (int i = 0; i < 5; i++) gpio_wakeup_enable((gpio_num_t)pins[i], GPIO_INTR_LOW_LEVEL);
+  esp_sleep_enable_gpio_wakeup();
+  esp_sleep_enable_timer_wakeup((uint64_t)ms * 1000ULL);
+  esp_light_sleep_start();
+}
+
 inline void boardDeepSleep() {
   EPD_Sleep();                              // kontroler ekranu w tryb uspienia
   digitalWrite(PIN_EPD_POWER, LOW);         // odetnij zasilanie ekranu
@@ -416,6 +426,9 @@ inline bool gfxFastReady() {
   return imagePrevValid;
 }
 
+// Liczniki odswiezen ekranu (do szacowania zuzycia baterii)
+uint32_t g_presFull = 0, g_presFast = 0;
+
 inline void gfxPresent() {
 #if USE_EPD_SLEEP
   EPD_Init();
@@ -427,6 +440,7 @@ inline void gfxPresent() {
 #endif
   memcpy(imagePrev, ImageBW, sizeof(imagePrev));
   imagePrevValid = true;
+  g_presFull++;
 }
 
 // Szybkie odswiezenie: sterownik dostaje stary i nowy obraz oraz przebieg DU (patrz EPD_Init.cpp).
@@ -436,4 +450,5 @@ inline void gfxPresentFast() {
   EPD_Update();
   memcpy(imagePrev, ImageBW, sizeof(imagePrev));
   imagePrevValid = true;
+  g_presFast++;
 }

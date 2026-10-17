@@ -21,7 +21,7 @@ STUB_SRC := common.cpp stubs/EPD_stub.cpp
 
 CPP_TESTS := test_core test_ui_features test_fonts_margins test_clock_settings \
              test_hyphenation_layout test_toc_chapters test_glyph_widths \
-             test_battery test_menu_shortcuts test_arduino_prototypes test_no_u8g2
+             test_battery test_battery_estimate test_menu_shortcuts test_arduino_prototypes test_no_u8g2
 
 .PHONY: test test-cpp test-js test-meta test-driver clean dirs fixtures
 test: test-cpp test-js test-meta

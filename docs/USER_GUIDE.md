@@ -40,7 +40,8 @@ Black tags on the right edge of the screen show what the three keys (top = HOME,
 | Reading | Font (Classic / Helvetica / Unifont / Century), size, bold, line spacing, margins, hyphenation |
 | Status line | master switch (turns all items on/off), percent, page n/N, time left, progress bar, clock in book, battery (Off / Low / Always) |
 | Clock | format (Off / 24 h / 12 h), time zone, **Set time** (opens an editor for date and time) |
-| Power & system | sleep after (1 / 5 / 10 / 30 min / never), sleep screen (Book / Image / Keep), page flip (Full / Fast beta), menu flip (Fast / Full), **menu font (Helvetica 12 / Unifont / Classic)**, **hotspot power (Low / Medium / High)**, full refresh every N pages, open last book at start, hotspot password (OK generates a new one) |
+| Battery | estimate on/off, capacity (800-3000 mAh), **Set voltage** (enter the measured voltage), mark the battery full, clear the estimate |
+| Power & system | sleep after (1 / 5 / 10 / 30 min / never), sleep screen (Book / Image / Keep), page flip (Full / Fast beta), menu flip (Fast / Full), **menu font (Helvetica 12 / Unifont / Classic)**, **hotspot power (Low / Medium / High)**, **power saving (Off / CPU 80 / Light sleep)**, full refresh every N pages, open last book at start, hotspot password (OK generates a new one) |
 
 **Set time** - UP/DOWN change the highlighted field (year, month, day, hour, minute; DOWN increases, like in *Go to page*), OK moves to the next field, HOME saves, BACK cancels. The time is entered in the chosen time zone and the date matters: it decides whether daylight saving time applies. If the clock has lost its time (after a full power loss) the editor starts from the last known time, or from the firmware's build date.
 
@@ -48,7 +49,21 @@ Black tags on the right edge of the screen show what the three keys (top = HOME,
 
 **Stats** - total reading time, finished books, pages read, speed (approximate words per minute), time for the current book, estimated time left.
 
-**Info** - free space, number of books, battery, time and date, board and firmware version. With no battery pin configured, OK opens the **pin finder** (see [HARDWARE.md](HARDWARE.md)).
+**Info** - free space, number of books, battery (an estimate shows as `~NN% (est.)`), time and date, board and firmware version.
+
+## Battery estimate
+
+The CrowPanel V1.2 cannot measure its battery ([HARDWARE.md](HARDWARE.md)), so InkBlink **estimates** it: it counts the time spent awake, in hotspot mode and asleep (and the screen refreshes), multiplies by the measured current and subtracts it from the capacity. A `~` before the percentage means "estimate".
+
+1. *Settings -> Battery -> Capacity*: pick your cell (for example 1200 mAh).
+2. Give it a starting point: measure the battery voltage with a multimeter **at rest** (no load, at least half an hour after charging or heavy use) and enter it in *Settings -> Battery -> Set voltage* (DOWN/UP change it, OK switches the step 0.01/0.05 V, HOME saves) or in the web page (*Battery -> Set from measured voltage*). Or choose *Mark battery full* after a full charge.
+3. Use the reader. Now and then measure the voltage again and compare it with the estimate; entering the new voltage corrects the estimate.
+
+Limits: the voltage-to-percent curve is flat in the middle (3.7-3.9 V), so a single voltage is a rough starting point; errors accumulate; deep sleep time is only counted when the clock was set before and after (set it on the web page), and the sleep current is a placeholder until it is measured. Every setting is appended to a log (`/battlog.csv`, downloadable from the web page) together with the counters since the previous entry, so the model can be refined later.
+
+## Power saving (experimental)
+
+*Settings -> Power & system -> Power saving*: **Off** (processor 240 MHz), **CPU 80** (processor 80 MHz; 160 MHz while the hotspot runs, 240 MHz while a book is being indexed) and **Light** (80 MHz plus light sleep whenever the reader is idle, woken by any button; never while the hotspot is on). Default is Off. Measure the idle current of each mode and check that the wheel and buttons still react and that auto-sleep still fires.
 
 ## Sleep and wake
 
@@ -78,4 +93,4 @@ No external resources are loaded; the pages work without internet.
 - **Hotspot not visible on the phone**: it can take 10-15 seconds to appear; the reader starts it before refreshing the screen. Turn the phone's WiFi off and on to force a fresh scan, and check the *Phones* counter on the Upload screen. The password is kept between sessions, so the phone remembers the network. If the network shows up on a PC as *Hidden network* or twice (once without encryption), the reader is probably too close to the receiver: set **Hotspot power** to *Low* and keep at least half a metre away. If it stays invisible, check the power supply first (WiFi start draws short current peaks; use USB or a source that can deliver at least 1 A) and look at the serial monitor (115200): `hotspot OK (proba N)` means the radio started, `proba N nieudana` or `Brownout` lines point to a failed start or a power problem.
 - **QR code does not scan**: hold the phone 15-25 cm away, avoid reflections on the glossy screen, or take a photo and tap the code in the photo. You can always type the network name and password.
 - **Ghost images after fast page flips**: set *Page flip* to Full or lower *Full refresh every* N pages.
-- **No battery indicator**: the battery measurement pin is not configured yet, see [HARDWARE.md](HARDWARE.md).
+- **No battery indicator**: this board has no battery sensor; set a starting point in *Settings -> Battery* (see "Battery estimate").

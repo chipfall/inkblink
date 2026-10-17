@@ -5,6 +5,8 @@ Versions are `MAJOR.MINOR.PATCH`. A `-dev` suffix marks work in progress; it is 
 ## 0.9.1-dev (unreleased)
 
 - Menu and screen titles in a clearer font (setting *Menu font*: Helvetica 12 / Unifont / Classic; default Helvetica 12): a distinct "l", fixes the broken "M" and "W" in bold Classic titles
+- Battery estimate without a sensor (Settings -> Battery): consumption model from measured currents, manual voltage entry (device and web page), "battery full", CSV log; battery indicator shows `~NN%`
+- Experimental *Power saving* setting: processor 80 MHz and light sleep in idle (to be measured)
 - Elecrow's driver files are now part of the repository (with Elecrow's permission); CI also runs the driver-dependent tests
 - Hotspot start hardened: clean WiFi restart before every start, up to 3 attempts, selectable transmit power (setting *Hotspot power*, default Medium) and AP configuration details on the serial monitor
 - Manual date and time setting (Settings -> Clock -> Set time); date shown on the Info screen and in the web page; clearer format examples in the web page

@@ -22,7 +22,7 @@ It turns the board into a small pocket reader: plain-text books and EPUB files (
 - Web interface: upload many books at once (drag & drop), delete books, change every setting, upload a custom sleep image (converted to 1-bit in the browser)
 - Sleep screen: book card / your own image / keep current screen; auto sleep after 1–30 min; wake with the encoder button
 - Clock set from your phone each time you open the web page (time zones with daylight saving)
-- Battery indicator (needs a one-time pin setup, see [docs/HARDWARE.md](docs/HARDWARE.md))
+- Battery estimate (the board has no battery sensor): based on time awake / asleep and screen refreshes, started from a voltage you enter, with a downloadable log; experimental power saving (80 MHz, light sleep)
 - Fast, flash-free refresh when moving through menus (can be switched to full refresh)
 
 ## Quick start

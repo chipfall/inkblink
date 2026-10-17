@@ -40,6 +40,7 @@
 #include "input.h"              // zdarzenia przyciskow
 #include "clock.h"
 #include "hyphen.h"
+#include "battery_model.h"
 #include "reader_fonts.h"       // czcionki ksiazki
 #include "webui_assets.h"       // strona WWW (HTML/CSS/JS)
 
@@ -136,8 +137,11 @@ struct Settings {
   bool fastMenu;       // szybkie (bez migania) odswiezanie list w menu
   uint8_t uiFont;      // czcionka menu i naglowkow: 0 Classic, 2 Helvetica 12, 3 Unifont (1 = dawne Helvetica 14, traktowane jak 2)
   uint8_t apPower;     // moc nadawania hotspotu: 0 niska (8,5 dBm), 1 srednia (13 dBm), 2 wysoka (19,5 dBm)
+  uint8_t powerSave;   // oszczedzanie energii: 0 wylaczone, 1 procesor 80 MHz, 2 lekkie uspienie w bezczynnosci
+  bool battEst;        // szacowanie baterii (plytka nie ma czujnika)
+  uint8_t battCap;     // pojemnosc ogniwa: indeks w BM_CAPS
 };
-Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 2, 1 };
+Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 2, 1, 0, true, 2 };
 
 // Czy pasek stanu w ogole jest rysowany (wplywa na uklad strony, wiec bateria go nie zmienia)
 // Czy wlaczona jest choc jedna pozycja paska stanu (glowny przelacznik "Status line" pokazuje ten stan)
@@ -169,6 +173,8 @@ void applyLayout() {
   if (cfg.uiFont == 1) cfg.uiFont = 2;            // dawne Helvetica 14 (zbyt ciasne w wierszach menu)
   if (cfg.uiFont > 3) cfg.uiFont = 0;
   if (cfg.apPower > 2) cfg.apPower = 1;
+  if (cfg.powerSave > 2) cfg.powerSave = 0;
+  if (cfg.battCap > 5) cfg.battCap = 2;
   fontSetLineGap(lineGapVals[cfg.lineGap]);
   fontSelect(cfg.famIdx, cfg.fontIdx, cfg.bold);
 
@@ -473,7 +479,7 @@ void removeAllIdx(const char* name) {
 // ============================================================
 //  Stan aplikacji
 // ============================================================
-enum Screen { S_MENU, S_LIBRARY, S_READER, S_UPLOAD, S_INFO, S_GOTO, S_SETTINGS, S_STATS, S_PINSCAN, S_SETTIME };
+enum Screen { S_MENU, S_LIBRARY, S_READER, S_UPLOAD, S_INFO, S_GOTO, S_SETTINGS, S_STATS, S_PINSCAN, S_SETTIME, S_SETBATT };
 Screen screen = S_MENU;
 bool fsOk = false;
 Preferences prefs;
@@ -685,10 +691,45 @@ void fmtDurationLong(uint32_t s, char* out, size_t n) {
 }
 
 // ============================================================
+//  Oszczedzanie energii (ustawienie "Power saving")
+//   0 = procesor 240 MHz, 1 = 80 MHz (hotspot 160 MHz, indeksowanie ksiazki 240 MHz),
+//   2 = jak 1 + lekkie uspienie w bezczynnosci (wybudzenie przyciskiem), tylko poza hotspotem.
+// ============================================================
+static int cpuMhzCur = 240;
+static void cpuSet(int mhz) {
+  if (mhz != cpuMhzCur) {
+    setCpuFrequencyMhz(mhz);
+    cpuMhzCur = mhz;
+  }
+}
+void powerApply() {
+  int want = 240;
+  if (cfg.powerSave > 0) want = (screen == S_UPLOAD) ? 160 : 80;
+  cpuSet(want);
+}
+static void idleWait() {
+  if (cfg.powerSave == 2 && screen != S_UPLOAD && boardReadKey() == KEY_NONE) boardLightSleep(250);
+  else delay(5);
+}
+
+// ============================================================
+//  Szacowanie baterii (patrz battery_model.h)
+// ============================================================
+BatModel bm;
+static uint32_t bmLastMs = 0, bmLastSave = 0, bmPrevFull = 0, bmPrevFast = 0;
+
+bool batteryIsEstimate() {
+  return PIN_BAT_ADC < 0 && cfg.battEst && bm.valid;
+}
+static const char* batTilde() {
+  return batteryIsEstimate() ? "~" : "";
+}
+
+// ============================================================
 //  Bateria
 // ============================================================
 bool batteryAvailable() {
-  return PIN_BAT_ADC >= 0;
+  return PIN_BAT_ADC >= 0 || batteryIsEstimate();
 }
 
 // Przyblizony poziom naladowania ogniwa Li-Po z napiecia (mV)
@@ -709,7 +750,7 @@ int batteryPercentFromMv(int mv) {
 
 // Napiecie baterii w mV z pamieci podrecznej (odswiezane co 30 s); -1 = brak pomiaru
 int batteryMv() {
-  if (!batteryAvailable()) return -1;
+  if (PIN_BAT_ADC < 0) return -1;             // bez czujnika nie ma napiecia, tylko szacunek procentowy
   if (screen == S_UPLOAD) return batMv;       // przy WiFi ADC2 nie dziala - uzywamy ostatniego odczytu
   if (batMv < 0 || millis() - batAt > 30000UL) {
     batMv = boardBatteryMv();
@@ -719,8 +760,108 @@ int batteryMv() {
 }
 
 int batteryPercent() {
+  if (PIN_BAT_ADC < 0) return batteryIsEstimate() ? (int)(bmPercent(bm) + 0.5f) : -1;
   int mv = batteryMv();
   return mv < 0 ? -1 : batteryPercentFromMv(mv);
+}
+
+// ---- zapis, aktualizacja i log modelu ----
+void bmSave() {
+  prefs.putBool("bm_ok", bm.valid);
+  prefs.putFloat("bm_rem", bm.remMah);
+  prefs.putFloat("bm_as", bm.awakeS);
+  prefs.putFloat("bm_hs", bm.hotspotS);
+  prefs.putFloat("bm_ss", bm.sleepS);
+  prefs.putUInt("bm_ff", bm.flipsFast);
+  prefs.putUInt("bm_fl", bm.flipsFull);
+}
+void bmLoad() {
+  bmReset(bm, BM_CAPS[cfg.battCap % 6]);
+  bm.valid = prefs.getBool("bm_ok", false);
+  bm.remMah = prefs.getFloat("bm_rem", 0);
+  bm.awakeS = prefs.getFloat("bm_as", 0);
+  bm.hotspotS = prefs.getFloat("bm_hs", 0);
+  bm.sleepS = prefs.getFloat("bm_ss", 0);
+  bm.flipsFast = prefs.getUInt("bm_ff", 0);
+  bm.flipsFull = prefs.getUInt("bm_fl", 0);
+  if (bm.remMah > bm.capMah) bm.remMah = bm.capMah;
+  bmLastMs = millis();
+  bmPrevFull = g_presFull;
+  bmPrevFast = g_presFast;
+}
+// Zmiana pojemnosci w ustawieniach: zachowaj procent
+void bmCapSync() {
+  float pct = bmPercent(bm);
+  bm.capMah = BM_CAPS[cfg.battCap % 6];
+  if (bm.valid) bm.remMah = bm.capMah * pct / 100.0f;
+}
+// Wolane w kazdej iteracji petli: dolicza czas pracy i odswiezenia ekranu od poprzedniego razu
+void bmUpdate() {
+  uint32_t now = millis();
+  uint32_t dt = now - bmLastMs;
+  bmLastMs = now;
+  uint32_t df = g_presFull - bmPrevFull, dfa = g_presFast - bmPrevFast;
+  bmPrevFull = g_presFull;
+  bmPrevFast = g_presFast;
+  if (!bm.valid) return;
+  bmAddRun(bm, screen == S_UPLOAD, cfg.powerSave, dt / 1000.0f);
+  bmAddFlips(bm, df, dfa);
+  if (now - bmLastSave > 600000UL) {
+    bmLastSave = now;
+    bmSave();
+  }
+}
+// Po wybudzeniu z gleboki snu: dolicz czas snu (wymaga ustawionego zegara przed snem i po nim)
+void bmBootSleepAccount() {
+  uint32_t t0 = prefs.getUInt("bm_slp", 0);
+  if (t0 && esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED && clockValid() && bm.valid) {
+    long d = (long)clockNow() - (long)t0;
+    if (d > 0 && d < 60L * 86400L) bmAddSleep(bm, (float)d);
+  }
+  prefs.putUInt("bm_slp", 0);
+}
+// Dopisuje wiersz do /battlog.csv (liczniki od poprzedniego ustawienia + stan szacunku przed i po)
+static void bmLog(const char* note, float volt, float pctBefore, float pctAfter) {
+  if (!fsOk) return;
+  File r = LittleFS.open("/battlog.csv", "r");
+  size_t sz = r ? r.size() : 0;
+  if (r) r.close();
+  if (sz > 12000) {                          // log nie rosnie bez konca
+    LittleFS.remove("/battlog.csv");
+    sz = 0;
+  }
+  File f = LittleFS.open("/battlog.csv", "a");
+  if (!f) return;
+  char line[200];
+  if (sz == 0) {
+    const char* hd = "time,volt,pct_from_volt,est_before,est_after,awake_h,hotspot_h,sleep_h,flips_fast,flips_full,power_save,capacity_mah,note\n";
+    f.write((const uint8_t*)hd, strlen(hd));
+  }
+  char tm[24], d[12], t2[12];
+  if (clockValid() && clockFormatDate(d, sizeof(d)) && clockFormat(t2, sizeof(t2), 1)) snprintf(tm, sizeof(tm), "%s %s", d, t2);
+  else snprintf(tm, sizeof(tm), "up%lus", (unsigned long)(millis() / 1000));
+  snprintf(line, sizeof(line), "%s,%.2f,%.1f,%.1f,%.1f,%.3f,%.3f,%.3f,%u,%u,%d,%d,%s\n", tm, volt, bmPctFromVolt(volt), pctBefore, pctAfter,
+           bm.awakeS / 3600.0f, bm.hotspotS / 3600.0f, bm.sleepS / 3600.0f, (unsigned)bm.flipsFast, (unsigned)bm.flipsFull,
+           (int)cfg.powerSave, (int)bm.capMah, note);
+  f.write((const uint8_t*)line, strlen(line));
+  f.close();
+}
+void bmSetVoltage(float v) {
+  float before = bm.valid ? bmPercent(bm) : -1;
+  float pct = bmPctFromVolt(v);
+  bmLog("voltage", v, before, pct);
+  bmSetPercent(bm, pct);
+  bmSave();
+}
+void bmMarkFull() {
+  float before = bm.valid ? bmPercent(bm) : -1;
+  bmLog("full", 4.20f, before, 100);
+  bmSetPercent(bm, 100);
+  bmSave();
+}
+void bmClear() {
+  bmReset(bm, BM_CAPS[cfg.battCap % 6]);
+  bmSave();
 }
 
 // Prawy gorny rog: zegar (jesli wlaczony) i bateria ("87%" + ikona)
@@ -728,8 +869,8 @@ void drawBatteryCorner() {
   int right = SCREEN_W - 4;                      // prawa krawedz zegara
   int pct = batteryPercent();
   if (pct >= 0) {
-    char t[8];
-    snprintf(t, sizeof(t), "%d%%", pct);
+    char t[10];
+    snprintf(t, sizeof(t), "%s%d%%", batTilde(), pct);
     uiBattery(SCREEN_W - 24, 2, pct);
     int tx = SCREEN_W - 24 - 4 - gfxTextWidth(t, FOOT_SIZE);
     gfxText(tx, 1, t, FOOT_SIZE);
@@ -980,8 +1121,8 @@ bool drawSleepBookCard() {
 
   int bp = batteryPercent();
   if (bp >= 0) {
-    char bt[8];
-    snprintf(bt, sizeof(bt), "%d%%", bp);
+    char bt[10];
+    snprintf(bt, sizeof(bt), "%s%d%%", batTilde(), bp);
     uiBattery(SCREEN_W - 28, 108, bp);
     gfxText(SCREEN_W - 28 - 4 - gfxTextWidth(bt, FOOT_SIZE), 108, bt, FOOT_SIZE);
   }
@@ -1311,7 +1452,7 @@ int findPage(uint32_t off) {
   return lo;
 }
 
-bool openBook(const char* name) {
+static bool openBookBody(const char* name) {
   closeBook();
   applyLayout();
 
@@ -1359,6 +1500,14 @@ bool openBook(const char* name) {
   loadToc(curBook, bookSize);
   Serial.printf("ksiazka: %s, %u B, %d stron\n", curBook, (unsigned)bookSize, totalPages);
   return true;
+}
+
+// Otwarcie ksiazki (w tym indeksowanie) na pelnej szybkosci procesora, potem wracamy do ustawionej
+bool openBook(const char* name) {
+  if (cfg.powerSave > 0) cpuSet(240);
+  bool ok = openBookBody(name);
+  powerApply();
+  return ok;
 }
 
 // Procent przeczytania liczony z pozycji w pliku
@@ -1652,6 +1801,9 @@ void loadSettings() {
   cfg.fastMenu = prefs.getBool("cfg_mf", cfg.fastMenu);
   cfg.uiFont = prefs.getUChar("cfg_uf", cfg.uiFont);
   cfg.apPower = prefs.getUChar("cfg_ap", cfg.apPower);
+  cfg.powerSave = prefs.getUChar("cfg_ps", cfg.powerSave);
+  cfg.battEst = prefs.getBool("cfg_be", cfg.battEst);
+  cfg.battCap = prefs.getUChar("cfg_bc", cfg.battCap);
   if (cfg.sleepIdx > 4) cfg.sleepIdx = 1;
   if (cfg.batMode > 2) cfg.batMode = 1;
   if (cfg.fullEvery > 2) cfg.fullEvery = 1;
@@ -1683,6 +1835,9 @@ void saveSettings() {
   prefs.putBool("cfg_mf", cfg.fastMenu);
   prefs.putUChar("cfg_uf", cfg.uiFont);
   prefs.putUChar("cfg_ap", cfg.apPower);
+  prefs.putUChar("cfg_ps", cfg.powerSave);
+  prefs.putBool("cfg_be", cfg.battEst);
+  prefs.putUChar("cfg_bc", cfg.battCap);
 }
 
 const char* onOff(bool b) {
@@ -1690,9 +1845,9 @@ const char* onOff(bool b) {
 }
 
 // Ustawienia sa podzielone na grupy (menu dwupoziomowe)
-#define SET_GROUPS 4
-static const char* const SET_GROUP_NAMES[SET_GROUPS] = { "Reading", "Status line", "Clock", "Power & system" };
-static const uint8_t SET_GROUP_ITEMS[SET_GROUPS] = { 6, 7, 3, 9 };
+#define SET_GROUPS 5
+static const char* const SET_GROUP_NAMES[SET_GROUPS] = { "Reading", "Status line", "Clock", "Power & system", "Battery" };
+static const uint8_t SET_GROUP_ITEMS[SET_GROUPS] = { 6, 7, 3, 10, 5 };
 
 // Teksty pozycji maja co najwyzej UI_CHARS - 2 znakow (przed nimi jest "> ")
 const char* groupItem(int g, int i) {
@@ -1735,7 +1890,7 @@ const char* groupItem(int g, int i) {
         else snprintf(b, sizeof(b), "Set time: not set");
       }
     }
-  } else {
+  } else if (g == 3) {
     switch (i) {
       case 0:
         if (sleepMinutes[cfg.sleepIdx] == 0) snprintf(b, sizeof(b), "Sleep: never");
@@ -1756,7 +1911,23 @@ const char* groupItem(int g, int i) {
         snprintf(b, sizeof(b), "Hotspot power: %s", apNames[cfg.apPower % 3]);
         break;
       }
+      case 8: {
+        static const char* const psNames[3] = { "Off", "CPU 80", "Light" };
+        snprintf(b, sizeof(b), "Power saving: %s", psNames[cfg.powerSave % 3]);
+        break;
+      }
       default: snprintf(b, sizeof(b), "Hotspot: %s", apPassword().c_str()); break;
+    }
+  } else {
+    switch (i) {
+      case 0: snprintf(b, sizeof(b), "Estimate: %s", onOff(cfg.battEst)); break;
+      case 1: snprintf(b, sizeof(b), "Capacity: %d mAh", (int)BM_CAPS[cfg.battCap % 6]); break;
+      case 2:
+        if (bm.valid) snprintf(b, sizeof(b), "Set voltage: ~%d%%", (int)(bmPercent(bm) + 0.5f));
+        else snprintf(b, sizeof(b), "Set voltage: ---");
+        break;
+      case 3: snprintf(b, sizeof(b), "Mark battery full"); break;
+      default: snprintf(b, sizeof(b), "Clear estimate"); break;
     }
   }
   return b;
@@ -1771,6 +1942,7 @@ int settingsCount() {
 }
 
 void goSetTime();                      // (ponizej, po ustawieniach)
+void goSetBatt();
 bool settingsFromReader = false;       // wejscie skrotem z ksiazki (dlugie BACK): BACK wraca do ksiazki
 char settingsResumeBook[NAME_LEN];
 
@@ -1821,7 +1993,7 @@ void groupChange(int g, int i) {
         break;
       default: break;                        // informacja: czas ustawia sie ze strony WWW
     }
-  } else {
+  } else if (g == 3) {
     switch (i) {
       case 0: cfg.sleepIdx = (cfg.sleepIdx + 1) % 5; break;
       case 1: cfg.sleepScreen = (cfg.sleepScreen + 1) % 3; break;
@@ -1831,7 +2003,22 @@ void groupChange(int g, int i) {
       case 5: cfg.fullEvery = (cfg.fullEvery + 1) % 3; break;
       case 6: cfg.autoOpen = !cfg.autoOpen; break;
       case 7: cfg.apPower = (cfg.apPower + 1) % 3; break;
+      case 8:
+        cfg.powerSave = (cfg.powerSave + 1) % 3;
+        powerApply();
+        break;
       default: apPasswordNew(); break;       // nowe haslo hotspotu
+    }
+  } else {
+    switch (i) {
+      case 0: cfg.battEst = !cfg.battEst; break;
+      case 1:
+        cfg.battCap = (cfg.battCap + 1) % 6;
+        bmCapSync();
+        break;
+      case 3: bmMarkFull(); break;
+      case 4: bmClear(); break;
+      default: break;                        // 2: edytor napiecia (otwierany w onKeySettings)
     }
   }
 }
@@ -1853,6 +2040,9 @@ void onKeySettings(const KeyEvent& e) {
       setSel = 0;
     } else if (setGroup == 2 && setSel == 2) {
       goSetTime();                           // reczne ustawianie daty i godziny
+      return;
+    } else if (setGroup == 4 && setSel == 2) {
+      goSetBatt();                           // reczne wpisanie napiecia baterii
       return;
     } else {
       groupChange(setGroup, setSel);
@@ -1986,6 +2176,65 @@ void onKeySetTime(const KeyEvent& e) {
   }
 }
 
+// ---------- Reczne wpisanie napiecia baterii ----------
+// Napiecie zmierzone multimetrem NA SPOCZYNKU (bateria bez obciazenia, po kilkudziesieciu minutach od
+// ladowania/pracy) ustawia punkt startowy szacunku wg krzywej Li-Po. DOWN zwieksza, UP zmniejsza,
+// OK = krok 0,01 / 0,05 V, HOME = zapisz, BACK = anuluj.
+int sbCv = 390;                  // centywolty
+int sbStep = 1;
+
+void drawSetBatt() {
+  gfxClear();
+  drawTitle(UI_X, "Battery voltage");
+  char l[28];
+  snprintf(l, sizeof(l), "%d.%02d V", sbCv / 100, sbCv % 100);
+  gfxText(UI_X, 24, l, 24);
+  snprintf(l, sizeof(l), "= ~%d%% on the curve", (int)(bmPctFromVolt(sbCv / 100.0f) + 0.5f));
+  gfxText(UI_X, 56, l, FOOT_SIZE);
+  if (bm.valid) snprintf(l, sizeof(l), "Estimate now: ~%d%%", (int)(bmPercent(bm) + 0.5f));
+  else snprintf(l, sizeof(l), "Estimate now: not set");
+  gfxText(UI_X, 70, l, FOOT_SIZE);
+  snprintf(l, sizeof(l), "Step: %d.%02d V", sbStep / 100, sbStep % 100);
+  gfxText(UI_X, 84, l, FOOT_SIZE);
+  gfxText(UI_X, 98, "Measure at rest, no load", FOOT_SIZE);
+  drawLegend("SAVE", "STEP", "CANCEL", true);
+  gfxPresent();
+}
+
+void goSetBatt() {
+  sbCv = bm.valid ? (int)(bmVoltFromPct(bmPercent(bm)) * 100.0f + 0.5f) : 390;
+  if (sbCv < 300) sbCv = 300;
+  if (sbCv > 425) sbCv = 425;
+  sbStep = 1;
+  screen = S_SETBATT;
+  drawSetBatt();
+}
+
+static void sbLeave() {
+  screen = S_SETTINGS;
+  setGroup = 4;
+  setSel = 2;
+  drawSettings();
+}
+
+void onKeySetBatt(const KeyEvent& e) {
+  if ((e.key == KEY_UP || e.key == KEY_DOWN) && isStep(e)) {
+    int dir = (e.key == KEY_DOWN) ? 1 : -1;
+    sbCv += dir * sbStep * (e.repeat > 8 ? 2 : 1);          // przytrzymanie: szybciej
+    if (sbCv < 300) sbCv = 300;
+    if (sbCv > 425) sbCv = 425;
+    drawSetBatt();
+  } else if (e.key == KEY_OK && isShort(e)) {
+    sbStep = (sbStep == 1) ? 5 : 1;
+    drawSetBatt();
+  } else if (e.key == KEY_HOME && isShort(e)) {
+    bmSetVoltage(sbCv / 100.0f);
+    sbLeave();
+  } else if (e.key == KEY_BACK && isShort(e)) {
+    sbLeave();
+  }
+}
+
 // ============================================================
 //  Menu
 // ============================================================
@@ -2033,6 +2282,7 @@ void buildMenu() {
 }
 
 void goMenu() {
+  powerApply();
   buildMenu();
   screen = S_MENU;
   drawMenu();
@@ -2049,9 +2299,11 @@ void goInfo() {
   } else {
     snprintf(l1, sizeof(l1), "Filesystem error");
   }
-  if (batteryAvailable()) {
+  if (PIN_BAT_ADC >= 0) {
     int mv = batteryMv();
     snprintf(l3, sizeof(l3), "Battery: %d%% %d.%02dV", batteryPercentFromMv(mv), mv / 1000, (mv % 1000) / 10);
+  } else if (batteryIsEstimate()) {
+    snprintf(l3, sizeof(l3), "Battery: ~%d%% (est.)", batteryPercent());
   } else {
     snprintf(l3, sizeof(l3), "Battery: not set");
   }
@@ -2251,7 +2503,7 @@ void handleRoot() {
   h += chip("Books", b);
   int bp = batteryPercent();
   if (bp >= 0) {
-    snprintf(b, sizeof(b), "%d%%", bp);
+    snprintf(b, sizeof(b), "%s%d%%", batTilde(), bp);
     h += chip("Battery", b);
   }
   h += "</div>";
@@ -2409,6 +2661,25 @@ void handleConfigGet() {
   h += "</b></p></div>";
   server.sendContent(h);
 
+  h = "<div class='card'><h2>Battery</h2><p class='sub'>This board cannot measure its battery, so the reader estimates it from the time spent awake, in hotspot mode and asleep. Enter the voltage you measured with a multimeter (battery at rest, no load) to set the starting point.</p>";
+  checkTag(h, "battest", "Show the estimate", cfg.battEst);
+  h += "<label class='f'>Battery capacity</label><select name='battcap'>";
+  for (int i = 0; i < 6; i++) {
+    char cl[16];
+    snprintf(cl, sizeof(cl), "%d mAh", (int)BM_CAPS[i]);
+    optTag(h, i, cl, cfg.battCap == i);
+  }
+  char be[24];
+  if (bm.valid) snprintf(be, sizeof(be), "~%d%%", (int)(bmPercent(bm) + 0.5f));
+  else snprintf(be, sizeof(be), "not set");
+  h += "</select><p class='note'>Estimate now: <b>";
+  h += be;
+  h += "</b> &middot; <a href='/battlog.csv'>download the log (CSV)</a></p>"
+       "<label class='f'>Set from measured voltage (V)</label><input name='bv' type='number' step='0.01' min='3.0' max='4.25' placeholder='e.g. 3.92'>";
+  checkTag(h, "bfull", "The battery is full", false);
+  h += "<p class='note'>Applied when you save. Every setting is logged together with the counters, so the estimate can be refined later.</p></div>";
+  server.sendContent(h);
+
   h = "<div class='card'><h2>Display</h2><p class='sub'>Fast page flip skips the black flash but is experimental.</p>"
       "<label class='f'>Page flip</label><select name='flip'>";
   optTag(h, 0, "Full refresh (flashes, cleanest)", !cfg.fastFlip);
@@ -2431,6 +2702,10 @@ void handleConfigGet() {
   optTag(h, 0, "Low (best when the phone or PC is next to the reader)", cfg.apPower == 0);
   optTag(h, 1, "Medium", cfg.apPower == 1);
   optTag(h, 2, "High (longer range, needs a strong power source)", cfg.apPower == 2);
+  h += "</select><label class='f'>Power saving (experimental)</label><select name='psave'>";
+  optTag(h, 0, "Off (processor 240 MHz)", cfg.powerSave == 0);
+  optTag(h, 1, "Processor 80 MHz", cfg.powerSave == 1);
+  optTag(h, 2, "80 MHz + light sleep when idle", cfg.powerSave == 2);
   h += "</select></div>";
   server.sendContent(h);
 
@@ -2483,6 +2758,27 @@ void handleConfigPost() {
   if (bm >= 0 && bm <= 2) cfg.batMode = bm;
   cfg.fastFlip = server.arg("flip").toInt() == 1;
   if (server.hasArg("mflip")) cfg.fastMenu = server.arg("mflip").toInt() == 1;
+  cfg.battEst = server.hasArg("battest");
+  if (server.hasArg("battcap")) {
+    int bc = server.arg("battcap").toInt();
+    if (bc >= 0 && bc <= 5 && bc != cfg.battCap) {
+      cfg.battCap = bc;
+      bmCapSync();
+    }
+  }
+  if (server.hasArg("psave")) {
+    int ps = server.arg("psave").toInt();
+    if (ps >= 0 && ps <= 2) cfg.powerSave = ps;
+    powerApply();
+  }
+  {
+    String bv = server.arg("bv");
+    if (bv.length() > 0) {
+      float v = bv.toFloat();
+      if (v >= 3.0f && v <= 4.25f) bmSetVoltage(v);
+    }
+    if (server.hasArg("bfull")) bmMarkFull();
+  }
   if (server.hasArg("appower")) {
     int ap = server.arg("appower").toInt();
     if (ap >= 0 && ap <= 2) cfg.apPower = ap;
@@ -2505,6 +2801,24 @@ void handleConfigPost() {
 
   server.sendHeader("Location", "/config?ok=1");
   server.send(303);
+}
+
+// Log szacowania baterii (CSV) do pobrania ze strony WWW
+void handleBattLog() {
+  String out;
+  if (fsOk) {
+    File f = LittleFS.open("/battlog.csv", "r");
+    if (f) {
+      char buf[256];
+      int n;
+      while ((n = f.read((uint8_t*)buf, sizeof(buf))) > 0) {
+        for (int i = 0; i < n; i++) out += buf[i];
+      }
+      f.close();
+    }
+  }
+  if (out.length() == 0) out = "time,volt,pct_from_volt,est_before,est_after,awake_h,hotspot_h,sleep_h,flips_fast,flips_full,power_save,capacity_mah,note\n";
+  server.send(200, "text/csv", out);
 }
 
 // Ustawianie zegara: przegladarka wysyla aktualny czas (sekundy od 1970) przy kazdym otwarciu strony
@@ -2805,6 +3119,7 @@ void goUpload() {
   LittleFS.remove(WP_TMP);
   server.begin();
   screen = S_UPLOAD;
+  powerApply();                    // hotspot: procesor min. 160 MHz
   drawUpload();
 }
 
@@ -2899,6 +3214,9 @@ void goSleep() {
   saveBookmark();            // bezpieczne takze poza czytnikiem (ma zabezpieczenia)
   if (fsOk && cfg.sleepScreen != 2) drawSleepScreen();   // karta ksiazki albo obraz (jedno odswiezenie)
   if (fsOk) LittleFS.end();
+  bmUpdate();                // dolicz czas pracy do snu
+  prefs.putUInt("bm_slp", clockValid() ? (uint32_t)clockNow() : 0);   // po wybudzeniu dolicz czas snu
+  bmSave();
   boardDeepSleep();          // nie wraca; po wybudzeniu setup() startuje od nowa
 }
 
@@ -2926,6 +3244,9 @@ void setup() {
   prefs.begin("reader", false);
   loadSettings();
   statsLoadTotals();
+  bmLoad();
+  bmBootSleepAccount();
+  powerApply();
   WiFi.onEvent(onWifiEvent);
 
   server.on("/", HTTP_GET, handleRoot);
@@ -2937,6 +3258,7 @@ void setup() {
   server.on("/wp", HTTP_POST, handleWpFinished, handleWpData);
   server.on("/wp_reset", HTTP_POST, handleWpReset);
   server.on("/time", HTTP_POST, handleTime);
+  server.on("/battlog.csv", HTTP_GET, handleBattLog);
   server.onNotFound(handleNotFound);
 
   curBook[0] = '\0';
@@ -2957,6 +3279,7 @@ void setup() {
 }
 
 void loop() {
+  bmUpdate();
   if (screen == S_UPLOAD) {
 #if CAPTIVE_TRICKS
     dns.processNextRequest();
@@ -2981,7 +3304,7 @@ void loop() {
   if (e.type == EV_NONE) {
     unsigned long lim = (unsigned long)sleepMinutes[cfg.sleepIdx] * 60000UL;
     if (lim && screen != S_UPLOAD && millis() - lastActivityMs > lim) goSleep();
-    delay(5);
+    idleWait();                 // delay(5) albo lekkie uspienie (Power saving)
     return;
   }
   lastActivityMs = millis();
@@ -3018,6 +3341,7 @@ void loop() {
     case S_GOTO: onKeyGoto(e); break;
     case S_SETTINGS: onKeySettings(e); break;
     case S_SETTIME: onKeySetTime(e); break;
+    case S_SETBATT: onKeySetBatt(e); break;
   }
   lastActivityMs = millis();
 }

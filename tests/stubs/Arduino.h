@@ -45,6 +45,7 @@ class String { public:
   bool operator==(const char* c) const {return s==c;} bool operator!=(const char* c) const {return s!=c;}
   void trim(){ size_t a=s.find_first_not_of(" \t\r\n"); if(a==std::string::npos){s="";return;} size_t b=s.find_last_not_of(" \t\r\n"); s=s.substr(a,b-a+1);} 
   int toInt() const {return atoi(s.c_str());}
+  float toFloat() const {return (float)atof(s.c_str());}
 };
 struct IPAddress { std::string v="192.168.0.152"; String toString() const {return String(v.c_str());} };
 struct SerialT { void begin(int){} void println(const char* x){ if(getenv("VERBOSE")) printf("[serial] %s\n",x);} void println(const IPAddress& i){ if(getenv("VERBOSE")) printf("[serial] ip %s\n", i.v.c_str());}

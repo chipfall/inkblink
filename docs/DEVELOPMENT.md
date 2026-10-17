@@ -44,6 +44,10 @@ make -C tests test-driver   # also the tests that need the real driver files (pa
 - EPUB tests build small synthetic EPUB files (`tools/epub/make_samples.py`), not commercial books.
 - Output images of some tests are written to `tests/build/run/png/` as raw 250 x 122 bitmaps for inspection.
 
+## Battery model
+
+`firmware/inkblink/battery_model.h` holds the whole model: the measured current constants (`BM_*`, two of them still marked TODO), the voltage-to-percent curve and the accounting functions. `inkblink.ino` calls `bmUpdate()` every loop iteration (time awake or in hotspot mode plus the refresh counters `g_presFull`/`g_presFast` from `board_crowpanel.h`), accounts sleep time at boot from the system clock and writes `/battlog.csv`. Update the constants after new measurements; the log keeps the raw counters so old entries can be recomputed. Tests: `tests/test_battery_estimate.cpp`.
+
 ## Versioning and releases
 
 - Versions are `MAJOR.MINOR.PATCH` (patch = bug fixes, minor = new features, `1.0.0` = considered stable).

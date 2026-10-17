@@ -20,14 +20,28 @@
 
 All defined in `firmware/inkblink/board_crowpanel.h`.
 
-## Battery indicator setup
+## Battery
 
-The battery voltage pin is not documented by the manufacturer, so the indicator stays hidden until you configure it once:
+- LiPo connector: SH1.0, 2 pins (red/black wires, check the polarity marks "-" and "+" next to the connector before plugging a cell in). A pack with a third (NTC) wire and a 3-pin plug does not fit.
+- Charger: TP4054 (USB-C 5 V -> LiPo). The USB-C socket goes to a CH340K USB-UART bridge, not to the native USB of the ESP32-S3.
+- **The board cannot measure the battery voltage.** In the schematic the `BAT` net only connects the battery connector, the TP4054, two Schottky diodes, a PMOS and a capacitor: no voltage divider, no fuel gauge. The unused ESP32-S3 pins (GPIO3, 8, 15-18, 20, 21) are not connected to anything, which matches measurements on a real board (their readings float and do not follow the battery). Two checks that led here: with the battery plugged in, readings on those pins were the same with and without USB.
+- Caveat: the schematic file in Elecrow's repository states in its description that it was generated from a 4.3-inch design, so it may not be exactly the V1.2 layout. A question to Elecrow is pending.
+- Therefore InkBlink **estimates** the battery (see the user guide, "Battery estimate"). `PIN_BAT_ADC` in `board_crowpanel.h` stays at `-1`; the pin finder on the Info screen is only useful for other boards.
 
-1. Plug in a charged LiPo battery.
-2. Open **Info** and press OK (*PINS*). The screen lists candidate ADC pins with their voltage in mV.
-3. The pin whose reading is roughly **1700-2150 mV** (marked with `*`) is the battery divider. Put its number into `PIN_BAT_ADC` in `board_crowpanel.h` and re-upload. If the divider ratio differs from 2.0, adjust `BAT_DIV_RATIO`.
-4. The percentage uses a LiPo curve (4.2 V = 100 %, 3.7 V = 28 %, 3.3 V = 0 %). While USB power is connected the reading reflects charging, not the cell alone.
+### Measured current draw (CrowPanel V1.2, supply 3.7 V, via the battery connector)
+
+The current is almost independent of the supply voltage (checked at 3.4 V and 4.2 V), so the estimate is done in mAh.
+
+| State | Current |
+|---|---|
+| Reading a static page / menu, processor 240 MHz | 34-35 mA |
+| Fast page flip (1 s) | 47-51 mA |
+| Full page flip (2 s) | 55-60 mA |
+| Menu navigation (1 s) | 52 mA (58-61 mA on a full refresh) |
+| Enter Upload (1 s) / hotspot idle | 129 mA / 108 mA |
+| Deep sleep | not measured yet |
+
+Consequence: reading time on a 1200 mAh cell is dominated by the idle current (about 35 h with the screen kept awake), page flips are only 1-3 % of the energy. The *Power saving* setting (80 MHz, light sleep) is there to measure how much the idle current can be reduced.
 
 ## Enclosure notes
 
