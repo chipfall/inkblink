@@ -141,11 +141,16 @@ inline void boardLightSleep(uint32_t ms) {
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup((uint64_t)ms * 1000ULL);
   esp_light_sleep_start();
+  // Zrodla wybudzenia zostaja zapamietane w ESP-IDF. Bez wylaczenia budzik 250 ms
+  // obudzilby tez gleboki sen (blad z 0.9.7: ekran uspienia i od razu restart).
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  for (int i = 0; i < 5; i++) gpio_wakeup_disable((gpio_num_t)pins[i]);
 }
 
 inline void boardDeepSleep() {
   EPD_Sleep();                              // kontroler ekranu w tryb uspienia
   digitalWrite(PIN_EPD_POWER, LOW);         // odetnij zasilanie ekranu
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);   // tylko przycisk budzi (zadnych resztek po lekkim uspieniu)
   rtc_gpio_pullup_en((gpio_num_t)PIN_WAKE);
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_WAKE);
   esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_WAKE, 0);

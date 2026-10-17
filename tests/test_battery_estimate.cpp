@@ -10,6 +10,7 @@ static bool near(float a,float b,float tol=0.02f){ return fabsf(a-b)<=tol; }
 static time_t g_fake=0;
 static const time_t SUMMER=1791894900;   // 2026-10-13 12:35 UTC
 extern bool g_slept;
+extern bool g_timerWake, g_deepTimerWake;
 static void writeFile(const char* name,const std::string& d){ std::string p=std::string("build/run/fs/")+name; FILE* f=fopen(p.c_str(),"wb"); fwrite(d.data(),1,d.size(),f); fclose(f); }
 static int inkIn(int x0,int y0,int x1,int y1){ int n=0; for(int y=y0;y<=y1;y++)for(int x=x0;x<=x1;x++) if(gfxIsInk(x,y)) n++; return n; }
 static int lines(const std::string& s){ int n=0; for(char c:s) if(c=='\n') n++; return n; }
@@ -100,11 +101,15 @@ int main(){
     g_cpuHistoryN=0; CHECK(openBook("P.txt")); CHECK(g_cpuHistoryN>=2 && g_cpuHistory[0]==240 && g_cpuHistory[g_cpuHistoryN-1]==80 && cpuMhzCur==80); printf("  otwarcie ksiazki: indeksowanie na 240 MHz, potem powrot do 80 MHz\n"); closeBook();
     cfg.powerSave=0; powerApply(); g_cpuHistoryN=0; CHECK(openBook("P.txt") && g_cpuHistoryN==0 && cpuMhzCur==240); closeBook();
     // lekkie uspienie tylko w trybie 2, poza hotspotem i bez wcisnietego przycisku
-    g_lightSleeps=0; screen=S_MENU;
+    g_lightSleeps=0; screen=S_MENU; lastActivityMs=g_ms-5000;
     cfg.powerSave=2; idleWait(); CHECK(g_lightSleeps==1); cfg.powerSave=1; idleWait(); CHECK(g_lightSleeps==1); cfg.powerSave=0; idleWait(); CHECK(g_lightSleeps==1);
     cfg.powerSave=2; screen=S_UPLOAD; idleWait(); CHECK(g_lightSleeps==1); printf("  lekkie uspienie: tylko tryb 2; nie w hotspocie\n");
     screen=S_MENU; g_pin[PIN_KEY_OK]=0; idleWait(); CHECK(g_lightSleeps==1); g_pin[PIN_KEY_OK]=1; printf("  wcisniety przycisk blokuje usypianie (brak petli natychmiastowych wybudzen)\n");
     idleWait(); CHECK(g_lightSleeps==2); loop(); CHECK(g_lightSleeps==3); cfg.powerSave=0; loop(); CHECK(g_lightSleeps==3); printf("  petla glowna w bezczynnosci usypia lekko tylko w trybie 2\n");
+    cfg.powerSave=2; lastActivityMs=g_ms; idleWait(); CHECK(g_lightSleeps==3); g_ms+=PS_LIGHT_GRACE_MS; idleWait(); CHECK(g_lightSleeps==4); printf("  lekkie uspienie dopiero po chwili bez przyciskow (menu bez opoznien)\n");
+    CHECK(!g_timerWake); printf("  po lekkim uspieniu budzik czasowy jest wylaczony\n");
+    g_timerWake=true; g_slept=false; g_deepTimerWake=true; goSleep(); CHECK(g_slept && !g_deepTimerWake); printf("  gleboki sen bez budzika czasowego (nie wraca od razu do ksiazki)\n");
+    CHECK(BM_AWAKE_MA_LIGHT < BM_AWAKE_MA_CPU80 && BM_AWAKE_MA_CPU80 < BM_AWAKE_MA_OFF); cfg.powerSave=0;
     // zgodnosc z modelem: stala dla trybu zdefiniowana, TODO w naglowku do uzupelnienia po pomiarach
     CHECK(BM_AWAKE_MA_OFF>20 && BM_HOTSPOT_MA>BM_AWAKE_MA_OFF); screen=S_MENU; cfg.powerSave=0; powerApply(); }
   printf("\n==== TESTY SZACOWANIA BATERII I OSZCZEDZANIA ENERGII: %d OK, %d bledow ====\n",passN,failN); return failN?1:0; }

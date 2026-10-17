@@ -1,8 +1,15 @@
 # Changelog
 
-Versions are `MAJOR.MINOR.PATCH`. A `-dev` suffix marks work in progress; it is dropped when a release is tagged (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
+Versions are `MAJOR.MINOR.PATCH`. During 0.9.x every update package bumps the patch number (`0.9.8` = update 8), so the Info screen always shows which package is installed. A version that has been tested on the device gets a git tag (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
 
-## 0.9.1-dev (unreleased)
+## 0.9.8
+
+- Fix: with *Power saving* = Light the device did not stay asleep (sleep screen appeared, then it restarted into the book). The light-sleep timer was still armed when entering deep sleep; all wake sources are now cleared, only the wheel button wakes the device
+- Light sleep starts 1.5 s after the last button press, so menu navigation has no wake-up lag
+- Battery estimate uses the measured currents: 24 mA idle at 80 MHz, below 1 mA in light sleep (to be refined)
+- Version numbering: the patch number follows the update package (this is update 8)
+
+## 0.9.7 (updates 1-7, earlier shown as 0.9.1-dev)
 
 - Menu and screen titles in a clearer font (setting *Menu font*: Helvetica 12 / Unifont / Classic; default Helvetica 12): a distinct "l", fixes the broken "M" and "W" in bold Classic titles
 - Battery estimate without a sensor (Settings -> Battery): consumption model from measured currents, manual voltage entry (device and web page), "battery full", CSV log; battery indicator shows `~NN%`

@@ -39,9 +39,11 @@ The current is almost independent of the supply voltage (checked at 3.4 V and 4.
 | Full page flip (2 s) | 55-60 mA |
 | Menu navigation (1 s) | 52 mA (58-61 mA on a full refresh) |
 | Enter Upload (1 s) / hotspot idle | 129 mA / 108 mA |
+| Static page, *Power saving* = CPU 80 | 24 mA (page flip / menu about 32 mA) |
+| Static page, *Power saving* = Light | below 1 mA (supply shows 0 mA, 1 mA resolution; page flip 26-28 mA) |
 | Deep sleep | not measured yet |
 
-Consequence: reading time on a 1200 mAh cell is dominated by the idle current (about 35 h with the screen kept awake), page flips are only 1-3 % of the energy. The *Power saving* setting (80 MHz, light sleep) is there to measure how much the idle current can be reduced.
+Consequence: with the processor at 240 MHz the reading time on a 1200 mAh cell is dominated by the idle current (about 35 h with the screen kept awake, about 50 h at 80 MHz). With light sleep the idle current drops below 1 mA and page flips (about 0.004-0.013 mAh each) become the main cost: 1000 pages use roughly 5-10 mAh. The exact light-sleep and deep-sleep currents still need a measurement with a series resistor.
 
 ## Enclosure notes
 

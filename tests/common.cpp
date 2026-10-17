@@ -11,6 +11,7 @@ bool g_apFail=false;
 int g_apFailFirst=0;
 int g_txPower=0;
 int g_wakeCause=0;
+bool g_timerWake=false, g_deepTimerWake=false;
 int g_lightSleeps=0, g_cpuMhz=240, g_cpuHistory[32], g_cpuHistoryN=0;
 
 int g_stations=0; int g_onEventCalls=0;

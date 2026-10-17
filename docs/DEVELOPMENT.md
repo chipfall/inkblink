@@ -50,12 +50,10 @@ make -C tests test-driver   # also the tests that need the real driver files (pa
 
 ## Versioning and releases
 
-- Versions are `MAJOR.MINOR.PATCH` (patch = bug fixes, minor = new features, `1.0.0` = considered stable).
-- Between releases `FW_VERSION` (in `inkblink.ino`) carries a `-dev` suffix, for example `0.9.1-dev`. The on-device Info screen shows it, so a bug report always says which build it came from.
-- Do **not** bump the version on every commit. Bump it when a build has been tested on the device and is worth keeping:
-  1. change `FW_VERSION` to the plain number (`0.9.1`) and rename the top `CHANGELOG.md` heading to it, with the date;
-  2. commit ("Release 0.9.1"), then `git tag v0.9.1` and `git push --tags`;
-  3. set the next work-in-progress version (`0.9.2-dev` or `0.10.0-dev`) and add a new heading at the top of the changelog.
+- Versions are `MAJOR.MINOR.PATCH` (minor = new features, `1.0.0` = considered stable).
+- During 0.9.x **every update package bumps the patch number**: update 8 = `0.9.8`, update 9 = `0.9.9`, then `0.9.10` and so on. The on-device Info screen shows `FW_VERSION`, so you always see which package is flashed and a bug report always names its build.
+- With each package: set `FW_VERSION` in `inkblink.ino` and add a heading for the new version at the top of `CHANGELOG.md`; commit message e.g. "0.9.8: light sleep fix".
+- When a version has been tested on the device and is worth keeping, tag it: add the date to its changelog heading, commit, then `git tag v0.9.8` and `git push --tags`. Only tagged versions are releases (and, later, get `.bin` files).
 - `tests/check_version.py` (part of `make test`) verifies that `FW_VERSION` is well formed and equals the newest `CHANGELOG.md` heading.
 - Release binaries contain the manufacturer's driver code. Elecrow's permission as received covers including the files in this repository; it does not explicitly mention compiled binaries or commercial use (see `THIRD_PARTY_NOTICES.md`), so ask Elecrow before selling pre-flashed devices.
 
