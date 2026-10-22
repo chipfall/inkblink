@@ -107,6 +107,7 @@ int main(){
     screen=S_MENU; g_pin[PIN_KEY_OK]=0; idleWait(); CHECK(g_lightSleeps==1); g_pin[PIN_KEY_OK]=1; printf("  wcisniety przycisk blokuje usypianie (brak petli natychmiastowych wybudzen)\n");
     idleWait(); CHECK(g_lightSleeps==2); loop(); CHECK(g_lightSleeps==3); cfg.powerSave=0; loop(); CHECK(g_lightSleeps==3); printf("  petla glowna w bezczynnosci usypia lekko tylko w trybie 2\n");
     cfg.powerSave=2; lastActivityMs=g_ms; idleWait(); CHECK(g_lightSleeps==3); g_ms+=PS_LIGHT_GRACE_MS; idleWait(); CHECK(g_lightSleeps==4); printf("  lekkie uspienie dopiero po chwili bez przyciskow (menu bez opoznien)\n");
+    screen=S_READER; lastActivityMs=g_ms; idleWait(); CHECK(g_lightSleeps==5); screen=S_MENU; printf("  w ksiazce lekkie uspienie od razu po zmianie strony\n");
     CHECK(!g_timerWake); printf("  po lekkim uspieniu budzik czasowy jest wylaczony\n");
     g_timerWake=true; g_slept=false; g_deepTimerWake=true; goSleep(); CHECK(g_slept && !g_deepTimerWake); printf("  gleboki sen bez budzika czasowego (nie wraca od razu do ksiazki)\n");
     CHECK(BM_AWAKE_MA_LIGHT < BM_AWAKE_MA_CPU80 && BM_AWAKE_MA_CPU80 < BM_AWAKE_MA_OFF); cfg.powerSave=0;

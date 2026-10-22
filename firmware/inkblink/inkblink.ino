@@ -44,7 +44,7 @@
 #include "reader_fonts.h"       // czcionki ksiazki
 #include "webui_assets.h"       // strona WWW (HTML/CSS/JS)
 
-#define FW_VERSION "0.9.8"          // 0.9.N = paczka/update N (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
+#define FW_VERSION "0.9.9"          // 0.9.N = paczka/update N (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
 
 // ---------- Ustawienia ekranu / interfejsu ----------
 #define FONT_SIZE 16            // czcionka interfejsu (menu, komunikaty)
@@ -707,12 +707,13 @@ void powerApply() {
   if (cfg.powerSave > 0) want = (screen == S_UPLOAD) ? 160 : 80;
   cpuSet(want);
 }
-// Lekkie uspienie dopiero po chwili bez przyciskow: przy przewijaniu menu nie ma opoznien
-// wybudzania, a w czasie czytania (strona wisi minutami) i tak spimy prawie caly czas.
+// Lekkie uspienie w menu dopiero po chwili bez przyciskow (przewijanie bez opoznien wybudzania).
+// W ksiazce od razu: tam lagu nie bylo, a 1,5 s na 80 MHz po kazdej stronie podwajalo jej koszt.
 #define PS_LIGHT_GRACE_MS 1500
 extern unsigned long lastActivityMs;
 static void idleWait() {
-  if (cfg.powerSave == 2 && screen != S_UPLOAD && millis() - lastActivityMs >= PS_LIGHT_GRACE_MS &&
+  unsigned long grace = (screen == S_READER) ? 0 : PS_LIGHT_GRACE_MS;
+  if (cfg.powerSave == 2 && screen != S_UPLOAD && millis() - lastActivityMs >= grace &&
       boardReadKey() == KEY_NONE) boardLightSleep(250);
   else delay(5);
 }

@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.PATCH`. During 0.9.x every update package bumps the patch number (`0.9.8` = update 8), so the Info screen always shows which package is installed. A version that has been tested on the device gets a git tag (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
 
+## 0.9.9
+
+- *Power saving* = Light: while reading, the device goes to light sleep right after a page flip (the 1.5 s delay now applies only to menus and settings), which roughly halves the energy per page
+
 ## 0.9.8
 
 - Fix: with *Power saving* = Light the device did not stay asleep (sleep screen appeared, then it restarted into the book). The light-sleep timer was still armed when entering deep sleep; all wake sources are now cleared, only the wheel button wakes the device
