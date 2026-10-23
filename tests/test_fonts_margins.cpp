@@ -43,12 +43,18 @@ int main(){
 
   SECTION("T26 hotspot: odstep kodu QR od tekstu i ramki");
   { prefs.s["ap_pw"]="48201937"; g_apFail=false; goUpload();
-    auto check=[&](int step){ uploadStep=step; drawUpload(); static QrCode q; char ssid[24]; apSsid(ssid,sizeof(ssid)); char pl[80]; if(step==0) snprintf(pl,sizeof(pl),"WIFI:T:WPA;S:%s;P:48201937;;",ssid); else snprintf(pl,sizeof(pl),"http://192.168.4.1"); qrEncode(pl,q); int h=q.size*QR_SCALE; int y0=20+(94-h)/2, x1=QR_X+h-1, y1=y0+h-1;
+    auto check=[&](int step){ uploadStep=step; drawUpload(); static QrCode q; char ssid[24]; apSsid(ssid,sizeof(ssid)); char pl[80]; if(step==0) snprintf(pl,sizeof(pl),"WIFI:T:WPA;S:%s;P:48201937;;",ssid); else snprintf(pl,sizeof(pl),"http://192.168.4.1"); qrEncode(pl,q); int h=q.size*QR_SCALE; int y0=QR_Y(h), x1=QR_X+h-1, y1=y0+h-1;
       // bounding box kodu rzeczywiscie ma tusz na krawedziach (modul znacznika) i nic wokol w odstepie 4 modulow (12 px) poza tytulem
       CHECK(inkIn(QR_X,y0,QR_X+8,y0+8)>20);
-      int left=inkIn(QR_X-12,y0-4,QR_X-1,y1+12), right=inkIn(x1+1,y0-4,x1+12,y1+12), bottom=inkIn(QR_X-12,y1+1,x1+12,y1+12);
-      printf("  krok %d: kod %dx%d px w (%d,%d); tusz w marginesach: lewy=%d prawy=%d dolny=%d, gorny odstep od tytulu=%d px\n",step,h,h,QR_X,y0,left,right,bottom,y0-16);
-      CHECK(left==0 && right==0 && bottom==0 && y0-16>=4); };
+      int left=inkIn(QR_X-12,y0-12,QR_X-1,y1+12), right=inkIn(x1+1,y0-12,x1+12,y1+12), bottom=inkIn(QR_X-12,y1+1,x1+12,y1+12), top=inkIn(QR_X-12,y0-12,x1+12,y0-1);
+      printf("  krok %d: kod %dx%d px w (%d,%d); tusz w marginesach (12 px = 4 moduly): lewy=%d prawy=%d gorny=%d dolny=%d\n",step,h,h,QR_X,y0,left,right,top,bottom);
+      CHECK(left==0 && right==0 && top==0 && bottom==0);
+      // bity formatu (oba egzemplarze) musza byc poprawnym slowem BCH dla poziomu M - wczesniej makro bit() z Arduino psulo je na urzadzeniu
+      int n=q.size, fa=0, fb=0;
+      for(int i=0;i<=5;i++) fa|=qrDark(q,8,i)<<i; fa|=qrDark(q,8,7)<<6; fa|=qrDark(q,8,8)<<7; fa|=qrDark(q,7,8)<<8; for(int i=9;i<15;i++) fa|=qrDark(q,14-i,8)<<i;
+      for(int i=0;i<8;i++) fb|=qrDark(q,n-1-i,8)<<i; for(int i=8;i<15;i++) fb|=qrDark(q,8,n-15+i)<<i;
+      int raw=fa^0x5412, rem=raw>>10; for(int i=0;i<10;i++) rem=(rem<<1)^((rem>>9)*0x537);
+      CHECK(fa==fb && ((raw>>10)<<10|rem)==raw && (raw>>13)==0); printf("  krok %d: bity formatu poprawne (poziom M, maska %d)\n",step,(raw>>10)&7); };
     check(0); check(1); uploadStep=0; uploadStop(); }
 
   SECTION("T27 test pinow: gwiazdka przy pinie w zakresie baterii");

@@ -18,6 +18,7 @@ using std::max; using std::min;
 #define INPUT 1
 #define OUTPUT 3
 #define F(x) x
+#define bit(b) (1UL << (b))   // jak w rdzeniu Arduino (koliduje z nazwami w kodzie, patrz qr.h)
 #ifndef PROGMEM
 #define PROGMEM
 #endif

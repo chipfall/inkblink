@@ -2,6 +2,12 @@
 
 Versions are `MAJOR.MINOR.PATCH`. During 0.9.x every update package bumps the patch number (`0.9.8` = update 8), so the Info screen always shows which package is installed. A version that has been tested on the device gets a git tag (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
 
+## 0.9.10
+
+- Fix: the QR codes on the Upload screen could not be scanned on the device. The Arduino `bit()` macro replaced a helper of the same name in the QR encoder, so all format bits were drawn dark (the code was fine in the PC tests, which now define the same macro and check the format bits)
+- Upload screen: QR code centred vertically with an empty margin of at least 4 modules on every side; the title moved above the text column
+- Battery estimate: deep-sleep current set to the measured 0.33 mA (4-day voltage-drop test)
+
 ## 0.9.9
 
 - *Power saving* = Light: while reading, the device goes to light sleep right after a page flip (the 1.5 s delay now applies only to menus and settings), which roughly halves the energy per page

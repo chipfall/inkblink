@@ -44,7 +44,7 @@
 #include "reader_fonts.h"       // czcionki ksiazki
 #include "webui_assets.h"       // strona WWW (HTML/CSS/JS)
 
-#define FW_VERSION "0.9.9"          // 0.9.N = paczka/update N (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
+#define FW_VERSION "0.9.10"         // 0.9.N = paczka/update N (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
 
 // ---------- Ustawienia ekranu / interfejsu ----------
 #define FONT_SIZE 16            // czcionka interfejsu (menu, komunikaty)
@@ -2995,6 +2995,7 @@ void handleUploadFinished() {
 // tuz obok kodu psuje jego odczyt.
 #define QR_SCALE 3                   // px na modul kodu QR
 #define QR_X 16                      // lewy brzeg kodu (px)
+#define QR_Y(h) ((SCREEN_H - (h)) / 2) // gorny brzeg kodu: srodek wysokosci ekranu
 
 void drawUpload() {
   char ssid[24];
@@ -3006,23 +3007,20 @@ void drawUpload() {
   char l[40];
 
   gfxClear();
-  uiWifiIcon(UI_X, 1);
 
   char payload[80];
-  if (uploadStep == 0) {
-    drawTitle(24, "Join WiFi");
-    snprintf(payload, sizeof(payload), "WIFI:T:WPA;S:%s;P:%s;;", ssid, pass.c_str());
-  } else {
-    drawTitle(24, "Open page");
-    snprintf(payload, sizeof(payload), "http://%s", ip);
-  }
+  if (uploadStep == 0) snprintf(payload, sizeof(payload), "WIFI:T:WPA;S:%s;P:%s;;", ssid, pass.c_str());
+  else snprintf(payload, sizeof(payload), "http://%s", ip);
 
+  // Kod na srodku wysokosci ekranu, tytul nad kolumna tekstu: nad i pod kodem zostaje
+  // co najmniej ~5 modulow pustego marginesu (wczesniej tytul stal tuz nad kodem).
   int tx = 104;                              // lewy brzeg kolumny tekstu
   if (qrEncode(payload, qr)) {
     int h = qr.size * QR_SCALE;
-    uiQr(qr, QR_X, 20 + (94 - h) / 2, QR_SCALE);
+    uiQr(qr, QR_X, QR_Y(h), QR_SCALE);
     tx = QR_X + h + 12;                      // 12 px (4 moduly) odstepu od kodu
   }
+  drawTitle(tx, uploadStep == 0 ? "Join WiFi" : "Open page");   // bez ikony WiFi: z nia tytul wchodzil w legende
   const int maxCh = (SCREEN_W - TAG_COL_W - tx) / 6;   // ile znakow 12 px miesci sie przed legenda
 
   if (uploadStep == 0) {

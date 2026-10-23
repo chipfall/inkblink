@@ -115,16 +115,18 @@ inline void qrFormatBits(QrBuild& b, int mask) {
   int rem = data;
   for (int i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >> 9) * 0x537);
   int bits = ((data << 10) | rem) ^ 0x5412;
-  auto bit = [&](int i) { return ((bits >> i) & 1) != 0; };
+  // Nie nazywac "bit": Arduino ma makro bit(b) = (1UL << b), ktore podmienialo wywolania
+  // i rysowalo wszystkie bity formatu jako ciemne (kod nieczytelny na urzadzeniu, na PC dzialal).
+  auto fmtBit = [&](int i) { return ((bits >> i) & 1) != 0; };
 
-  for (int i = 0; i <= 5; i++) qrSet(b, 8, i, bit(i));
-  qrSet(b, 8, 7, bit(6));
-  qrSet(b, 8, 8, bit(7));
-  qrSet(b, 7, 8, bit(8));
-  for (int i = 9; i < 15; i++) qrSet(b, 14 - i, 8, bit(i));
+  for (int i = 0; i <= 5; i++) qrSet(b, 8, i, fmtBit(i));
+  qrSet(b, 8, 7, fmtBit(6));
+  qrSet(b, 8, 8, fmtBit(7));
+  qrSet(b, 7, 8, fmtBit(8));
+  for (int i = 9; i < 15; i++) qrSet(b, 14 - i, 8, fmtBit(i));
 
-  for (int i = 0; i < 8; i++) qrSet(b, b.size - 1 - i, 8, bit(i));
-  for (int i = 8; i < 15; i++) qrSet(b, 8, b.size - 15 + i, bit(i));
+  for (int i = 0; i < 8; i++) qrSet(b, b.size - 1 - i, 8, fmtBit(i));
+  for (int i = 8; i < 15; i++) qrSet(b, 8, b.size - 15 + i, fmtBit(i));
   qrSet(b, 8, b.size - 8, true);              // zawsze ciemny modul
 }
 

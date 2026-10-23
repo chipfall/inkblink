@@ -15,11 +15,11 @@
 
 #define BM_AWAKE_MA_OFF 34.5f     // czuwanie, statyczny ekran, procesor 240 MHz (pomiar)
 #define BM_AWAKE_MA_CPU80 24.0f   // czuwanie, procesor 80 MHz (pomiar 0.9.7)
-#define BM_AWAKE_MA_LIGHT 1.0f    // lekkie uspienie: zasilacz pokazal 0 mA (<1 mA); TODO: dokladny pomiar rezystorem
+#define BM_AWAKE_MA_LIGHT 1.0f    // lekkie uspienie: zasilacz pokazal 0 mA (<1 mA), wartosc z zapasem
 #define BM_HOTSPOT_MA 108.0f      // hotspot wlaczony (pomiar)
 #define BM_FLIP_FAST_MAH 0.0040f  // dodatkowy ladunek jednego szybkiego odswiezenia ekranu (pomiar)
 #define BM_FLIP_FULL_MAH 0.0128f  // ... pelnego odswiezenia (pomiar)
-#define BM_SLEEP_MA 0.30f         // TODO: zmierzyc (gleboki sen)
+#define BM_SLEEP_MA 0.33f         // gleboki sen: pomiar 4 dni spadku napiecia (ok. 0,30-0,35 mA)
 
 static const uint16_t BM_CAPS[6] = { 800, 1000, 1200, 1500, 2000, 3000 };   // dostepne pojemnosci (mAh)
 
