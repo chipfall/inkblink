@@ -1,14 +1,14 @@
 #pragma once
 // ============================================================
-//  Zdarzenia przyciskow: krotkie / dlugie wcisniecie i powtarzanie
-//  przy przytrzymaniu. Zalezy tylko od boardKeyDown(Key) z pliku plytki,
-//  wiec dziala tak samo na kazdej plytce.
+//  Button events: short / long press and repeat while held.
+//  Depends only on boardKeyDown(Key) from the board file,
+//  so it works the same on every board.
 //
-//  UP / DOWN (nawigacja):  EV_PRESS od razu po wcisnieciu,
-//                          potem EV_REPEAT co 250 ms po 500 ms trzymania
-//                          (repeat = numer powtorzenia 1, 2, 3...).
-//  OK / BACK / HOME:       EV_SHORT po puszczeniu (krotkie wcisniecie)
-//                          albo EV_LONG po 800 ms trzymania (raz).
+//  UP / DOWN (navigation):  EV_PRESS right after the press,
+//                           then EV_REPEAT every 250 ms after 500 ms of holding
+//                           (repeat = repeat number 1, 2, 3...).
+//  OK / BACK / HOME:        EV_SHORT on release (short press)
+//                           or EV_LONG after 800 ms of holding (once).
 // ============================================================
 #include <Arduino.h>
 
@@ -40,7 +40,7 @@ inline bool isLong(const KeyEvent& e) {
   return e.type == EV_LONG;
 }
 
-// Wolac w kazdym obiegu petli. Nie blokuje (poza kilkunastoma ms na debounce).
+// Call on every loop pass. Does not block (apart from a dozen or so ms of debounce).
 inline KeyEvent inputPoll() {
   static Key active = KEY_NONE;
   static unsigned long tDown = 0, lastFire = 0, tUp = 0;
@@ -51,12 +51,12 @@ inline KeyEvent inputPoll() {
   unsigned long now = millis();
 
   if (active == KEY_NONE) {
-    if (now - tUp < LOCKOUT_MS) return ev;       // drgania po puszczeniu
+    if (now - tUp < LOCKOUT_MS) return ev;       // bounce after release
     static const Key order[] = { KEY_UP, KEY_DOWN, KEY_OK, KEY_BACK, KEY_HOME };
     for (Key k : order) {
       if (boardKeyDown(k)) {
         delay(DEBOUNCE_MS);
-        if (!boardKeyDown(k)) return ev;          // to byly drgania
+        if (!boardKeyDown(k)) return ev;          // that was bounce
         active = k;
         tDown = lastFire = millis();
         longFired = false;
@@ -69,7 +69,7 @@ inline KeyEvent inputPoll() {
   }
 
   if (!boardKeyDown(active)) {
-    delay(10);                                    // drgania podczas trzymania?
+    delay(10);                                    // bounce while held?
     if (boardKeyDown(active)) return ev;
     Key k = active;
     active = KEY_NONE;

@@ -1,14 +1,14 @@
-// Based on Elecrow's CrowPanel ESP32 2.13" e-paper driver
-// (https://github.com/Elecrow-RD/CrowPanel-ESP32-2.13-E-paper-HMI-Display-with-122-250),
-// included in the InkBlink repository with Elecrow's permission - see THIRD_PARTY_NOTICES.md.
-// Modified for InkBlink: initialisation for the JD79661 controller of hardware V1.2 and
+// Modified e-paper initialisation for InkBlink, derived from the board manufacturer's
+// sample driver. Changes: initialisation for the JD79661 controller of hardware V1.2 and
 // EPD_DisplayImageFast() (partial refresh).
+// This modified version is not made, checked or supported by the board manufacturer.
+// Origin and permission: see THIRD_PARTY_NOTICES.md.
 #ifndef _EPD_INIT_H_
 #define _EPD_INIT_H_
 
 #include "spi.h"
 
-/* 定义墨水屏显示方向 */
+/* e-paper display orientation */
 #define USE_HORIZONTIAL 2 /* 0 1 2 3 */
 #if USE_HORIZONTIAL == 0 | USE_HORIZONTIAL == 2
 #define EPD_W 250
@@ -19,12 +19,12 @@
 #define EPD_H 250
 #define ALLSCREEN_BYTES ((EPD_W % 8) ? (EPD_W / 8 + 1) : (EPD_W / 8)) * EPD_H
 #endif
-/* 定义颜色参数 */
-/* R24H:黑色像素写0 白色像素写1 */
+/* colour values */
+/* R24H: black pixel = 0, white pixel = 1 */
 #define WHITE 0xFF
 #define BLACK 0x00
 
-/* 波形 LUT (外部声明，定义在 .cpp 文件末尾) */
+/* waveform LUTs (declared here, defined at the end of the .cpp file) */
 extern const unsigned char lut_R20_GC[];
 extern const unsigned char lut_R21_GC[];
 extern const unsigned char lut_R22_GC[];
@@ -37,7 +37,7 @@ extern const unsigned char lut_R22_DU[];
 extern const unsigned char lut_R23_DU[];
 extern const unsigned char lut_R24_DU[];
 
-/* 函数说明 */
+/* functions */
 void EPD_READBUSY(void);
 void EPD_HW_SW_RESET(void);
 void EPD_Sleep(void);

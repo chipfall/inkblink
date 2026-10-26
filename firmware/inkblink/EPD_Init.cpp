@@ -1,17 +1,17 @@
-// Based on Elecrow's CrowPanel ESP32 2.13" e-paper driver
-// (https://github.com/Elecrow-RD/CrowPanel-ESP32-2.13-E-paper-HMI-Display-with-122-250),
-// included in the InkBlink repository with Elecrow's permission - see THIRD_PARTY_NOTICES.md.
-// Modified for InkBlink: initialisation for the JD79661 controller of hardware V1.2 and
+// Modified e-paper initialisation for InkBlink, derived from the board manufacturer's
+// sample driver. Changes: initialisation for the JD79661 controller of hardware V1.2 and
 // EPD_DisplayImageFast() (partial refresh).
+// This modified version is not made, checked or supported by the board manufacturer.
+// Origin and permission: see THIRD_PARTY_NOTICES.md.
 #include "EPD_Init.h"
 
 
 static uint8_t lut_flag = 0;
 /**
-   @brief       EPD读忙
-   @param       无
-   @retval      无
-   @note        BUSY 高电平为忙状态 低电平为空闲状态
+   @brief       EPD busy wait
+   @param       none
+   @retval      none
+   @note        on this board BUSY low = busy, high = idle (inverted)
 */
 void EPD_READBUSY(void)
 {
@@ -23,10 +23,10 @@ void EPD_READBUSY(void)
 }
 
 /**
-   @brief       EPD软硬件复位
-   @param       无
-   @retval      无
-   @note        退出休眠时需要进行一次硬件复位
+   @brief       EPD hardware and software reset
+   @param       none
+   @retval      none
+   @note        a hardware reset is needed when leaving sleep
 */
 void EPD_HW_SW_RESET(void)
 {
@@ -41,10 +41,10 @@ void EPD_HW_SW_RESET(void)
 }
 
 /**
-   @brief       EPD进入休眠模式
-   @param       无
-   @retval      无
-   @note        不同休眠模式下功耗不同 默认配置模式1 保留RAM数据
+   @brief       EPD enters sleep mode
+   @param       none
+   @retval      none
+   @note        power differs between sleep modes; mode 1 (default) keeps the RAM data
 */
 void EPD_Sleep(void)
 {
@@ -56,26 +56,26 @@ void EPD_Sleep(void)
 
 /**
 ****************************************************************************
-  此处简单对R22h做简单介绍，方便理解R22h的参数配置
-  R22h寄存器可配置位为A7 A6 A5 A4 A3 A2 A1 A0;其功能如下
-  A7 Enable internal clock oscillator                  使能内部时钟振荡器
-  A6 Turn-on DC-Dc boost                               启动DC-DC升压
-  A5 Read the temperature sensor                       读取温度传感器
-  A4 Search and load the LUT from OTP                  搜索并从OTP加载LUT
-  A3 Perform 0=DISPLAY Mode 1 1=DISPLAY Mode 2         控制EPD的显示模式
-  A2 Perform image display (content in RAM)sequence    执行RAM中的图像显示
-  A1 Turn-off DC-DC boost                              关闭DC-DC升压
-  A0 Disable the internal clock oscillator             失能内部时钟振荡器
-  关于温度传感器说明：EPD是通过内置的温度传感器进行相应的LUT加载 从而实现不
-  同的显示模式如本工程中的快刷模式就是如此 通过给定温度系数 执行相应的刷新
-  关于显示模式；模式1 模式2可以理解为全刷 局刷模式
+  A short description of register R22h, to make its parameters easier to understand
+  R22h has the configurable bits A7 A6 A5 A4 A3 A2 A1 A0; their functions:
+  A7 Enable internal clock oscillator
+  A6 Turn-on DC-Dc boost
+  A5 Read the temperature sensor
+  A4 Search and load the LUT from OTP
+  A3 Perform 0=DISPLAY Mode 1 1=DISPLAY Mode 2
+  A2 Perform image display (content in RAM)sequence
+  A1 Turn-off DC-DC boost
+  A0 Disable the internal clock oscillator
+  Temperature sensor: the EPD loads the LUT that matches its built-in temperature sensor, which is how
+  different display modes (such as the fast mode in this project) work: a given temperature value selects the refresh
+  Display modes: mode 1 and mode 2 can be read as full and partial refresh
 ****************************************************************************
 */
 
 /**
-   @brief       EPD全刷模式更新显示
-   @param       无
-   @retval      无
+   @brief       EPD display update, full refresh
+   @param       none
+   @retval      none
 */
 void EPD_Update(void)
 {
@@ -94,16 +94,16 @@ void EPD_Update_Fast(void)
 }
 
 /**
-   @brief       EPD局刷模式更新显示
-   @param       无
-   @retval      无
+   @brief       EPD display update, partial refresh
+   @param       none
+   @retval      none
 */
 void EPD_PartUpdate(void)
 {
-  EPD_WR_REG(0x22);  /* 显示模式控制指令 具体参考SSD1680 datasheet */
-  /* 如果局刷之前已经开启时钟以及DC-DC并且没有关闭的话那么这里我们就无需再次开启否则必须开启！！！ */
-  /* 开启时钟 开启DC-DC 读取环温 加载LUT 工作在局刷模式 执行图像刷新 保持DC-DC 时钟开启*/
-  EPD_WR_DATA8(0xFC); /* 未避免用户对使用流程不熟悉这里默认做开启配置,如前面已经开启此处可以修改为 0x1C*/
+  EPD_WR_REG(0x22);  /* display mode control command, see the SSD1680 datasheet */
+  /* if the clock and DC-DC were already on before the partial refresh and not turned off, they need not be turned on again; otherwise they must be! */
+  /* clock on, DC-DC on, read the temperature, load the LUT, partial mode, refresh the image, keep DC-DC and the clock on*/
+  EPD_WR_DATA8(0xFC); /* turned on by default here for safety; if they are already on, this can be changed to 0x1C*/
   EPD_WR_REG(0x20);
   EPD_READBUSY();
 
@@ -114,8 +114,8 @@ void EPD_PartUpdate(void)
 
 /**
    @brief       Clear
-   @param       无
-   @retval      无
+   @param       none
+   @retval      none
 */
 void EPD_Clear(void)
 {
@@ -137,14 +137,14 @@ void EPD_Clear(void)
 }
 
 /**
-   @brief       EPD全屏颜色填充
-   @param       color：填充颜色值
-   @retval      无
+   @brief       EPD fill the whole screen with a colour
+   @param       color: fill colour value
+   @retval      none
 */
 void EPD_ALL_Fill(uint8_t color)
 {
   uint32_t i;
-  EPD_WR_REG(0x3C);/* 边界波形控制指令 具体参考SSD1680 datasheet */
+  EPD_WR_REG(0x3C);/* border waveform control command, see the SSD1680 datasheet */
   if (color)
   {
     EPD_WR_DATA8(0x01);
@@ -153,7 +153,7 @@ void EPD_ALL_Fill(uint8_t color)
   {
     EPD_WR_DATA8(0x00);
   }
-  EPD_WR_REG(0x24); /* 写RAM指令 具体参考SSD1680 datasheet */
+  EPD_WR_REG(0x24); /* write RAM command, see the SSD1680 datasheet */
   for (i = 0; i < ALLSCREEN_BYTES; i++)
   {
     EPD_WR_DATA8(color);
@@ -162,9 +162,9 @@ void EPD_ALL_Fill(uint8_t color)
 }
 
 /**
-   @brief       EPD全屏显示图像
-   @param       ImageBW：图像数组名
-   @retval      无
+   @brief       EPD show an image on the whole screen
+   @param       ImageBW: image array
+   @retval      none
 */
 void EPD_DisplayImage(const uint8_t *ImageBW)
 {
@@ -295,10 +295,10 @@ void EPD_HW_Init_Fast(void)
 }
 
 /* ------------------------------------------------------------------ */
-/*                          LUT 波形下载                              */
+/*                          LUT waveform upload                              */
 /* ------------------------------------------------------------------ */
 
-/* 写入 GC (全刷) 波形 */
+/* write the GC (full refresh) waveform */
 void lut_GC(void)
 {
     uint8_t count;
@@ -338,7 +338,7 @@ void lut_GC(void)
     }
     else
     {
-        /* 参考代码原设计：寄存器 0x23 写 R22 数据，0x22 写 R23 数据 (交替轮换波形) */
+        /* as in the reference code: register 0x23 gets the R22 data, 0x22 gets the R23 data (alternating waveforms) */
         EPD_WR_REG(0x23);
         for (count = 0; count < 56; count++)
         {
@@ -354,7 +354,7 @@ void lut_GC(void)
     }
 }
 
-/* 写入 DU (局刷) 波形 */
+/* write the DU (partial refresh) waveform */
 void lut_DU(void)
 {
     uint8_t count;
@@ -394,7 +394,7 @@ void lut_DU(void)
     }
     else
     {
-        /* 参考代码原设计：寄存器 0x22 写 R23 数据，0x23 写 R22 数据 (交替轮换波形) */
+        /* as in the reference code: register 0x22 gets the R23 data, 0x23 gets the R22 data (alternating waveforms) */
         EPD_WR_REG(0x22);
         for (count = 0; count < 56; count++)
         {

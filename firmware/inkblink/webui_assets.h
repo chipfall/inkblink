@@ -1,12 +1,12 @@
 #pragma once
 // ============================================================
-//  Strona WWW czytnika: wspolne czesci (naglowek, style, skrypty).
-//  Wszystko w jednym pliku HTML bez zewnetrznych zasobow (dziala bez internetu).
-//  Teksty strony sa po angielsku.
+//  Reader web page: shared parts (header, styles, scripts).
+//  Everything in one HTML file without external resources (works without internet).
+//  The page texts are in English.
 // ============================================================
 #include <Arduino.h>
 
-// ---------- Naglowek + style + menu ----------
+// ---------- Header + styles + menu ----------
 const char WEB_HEAD[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -75,14 +75,14 @@ input[type=file].plain{width:100%;font-size:14px}
 <main>
 )HTML";
 
-// ---------- Zakonczenie ----------
+// ---------- Footer ----------
 const char WEB_TAIL[] PROGMEM = R"HTML(</main>
 <script>document.querySelectorAll('nav a').forEach(function(a){if(a.getAttribute('href')===location.pathname)a.classList.add('on');});
 try{fetch('/time',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'t='+Math.floor(Date.now()/1000)}).then(function(r){return r.text();}).then(function(t){var e=document.getElementById('devtime');if(e)e.textContent=t;}).catch(function(){});}catch(e){}</script>
 </body></html>
 )HTML";
 
-// ---------- Strona "Books": wysylanie plikow i usuwanie ----------
+// ---------- "Books" page: file upload and deletion ----------
 const char WEB_JS_BOOKS[] PROGMEM = R"JS(<script>
 (function(){
 'use strict';
@@ -138,7 +138,7 @@ tagList(opf,'item').forEach(function(t){var id=attr(t,'id');if(!id)return;var pr
 var sp=tagList(opf,'spine')[0]||'',sref=attr(sp,'toc');if(sref&&man[sref])ncxId=sref;
 var spine=[];tagList(opf,'itemref').forEach(function(t){var id=attr(t,'idref'),lin=attr(t,'linear');if(id&&man[id]&&lin!=='no'&&/html|xml/.test(man[id].type))spine.push(resolve(opfPath,man[id].href));});
 if(!spine.length)throw new Error('empty book (no text chapters)');
-// spis tresci: NCX albo nav (EPUB3)
+// table of contents: NCX or nav (EPUB3)
 var toc=[];
 if(navId){var nv=await getText(resolve(opfPath,man[navId].href));if(nv){var nb=/<nav\b[^>]*epub:type\s*=\s*["']toc["'][^>]*>([\s\S]*?)<\/nav>/i.exec(nv);var seg=nb?nb[1]:nv,base=resolve(opfPath,man[navId].href),ar=/<a\b([^>]*)>([\s\S]*?)<\/a>/gi,mm;while((mm=ar.exec(seg))){var hr=attr('<a '+mm[1]+'>','href');if(hr)toc.push({file:resolve(base,hr),frag:hr.indexOf('#')>=0?hr.split('#')[1]:'',title:strip(mm[2])});}}}
 if(!toc.length&&ncxId){var nx=await getText(resolve(opfPath,man[ncxId].href));if(nx){var nbase=resolve(opfPath,man[ncxId].href),nr=/<navLabel>\s*<text>([\s\S]*?)<\/text>\s*<\/navLabel>\s*<content\b([^>]*)>/gi,nm2;while((nm2=nr.exec(nx))){var src=attr('<c '+nm2[2]+'>','src');if(src)toc.push({file:resolve(nbase,src),frag:src.indexOf('#')>=0?src.split('#')[1]:'',title:strip(nm2[1])});}}}
@@ -198,7 +198,7 @@ window._booksRun=run;
 </script>
 )JS";
 
-// ---------- Strona "Sleep image": konwersja obrazu do 1 bitu i wyslanie ----------
+// ---------- "Sleep image" page: converting the picture to 1 bit and sending it ----------
 const char WEB_JS_WALLPAPER[] PROGMEM = R"JS(<script>
 (function(){
 var W=250,H=122,BYTES=3904;
@@ -225,7 +225,7 @@ var black=nw===0;if(inv.checked)black=!black;if(black)bits[y*32+(x>>3)]|=(0x80>>
 var out=ctx.createImageData(W,H);
 for(var y2=0;y2<H;y2++)for(var x2=0;x2<W;x2++){var bl=(bits[y2*32+(x2>>3)]&(0x80>>(x2&7)))!==0,o=(y2*W+x2)*4,val=bl?0:255;out.data[o]=out.data[o+1]=out.data[o+2]=val;out.data[o+3]=255;}
 ctx.putImageData(out,0,0);send.disabled=false;}
-// przeciaganie (mysz, palec) i szczypanie dwoma palcami; wspolrzedne ekranu -> piksele czytnika
+// dragging (mouse, finger) and two-finger pinch; screen coordinates -> reader pixels
 function k(){return W/cv.getBoundingClientRect().width;}
 function pinch(){var p=Object.keys(ptrs).map(function(i){return ptrs[i];});if(p.length<2)return 0;var dx=p[0].x-p[1].x,dy=p[0].y-p[1].y;return Math.sqrt(dx*dx+dy*dy);}
 cv.addEventListener('pointerdown',function(e){if(!img)return;cv.setPointerCapture(e.pointerId);ptrs[e.pointerId]={x:e.clientX,y:e.clientY};drag={d:pinch(),z:z};e.preventDefault();});
@@ -251,7 +251,7 @@ render();
 </script>
 )JS";
 
-// ---------- Strona "Books": karta wysylania plikow ----------
+// ---------- "Books" page: file upload card ----------
 const char WEB_BOOKS_UPLOAD[] PROGMEM = R"HTML(<div class="card"><h2>Add books</h2>
 <p class="sub">Plain text (.txt, UTF-8) or EPUB. EPUB files are converted to text in your browser (with a chapter list), so your phone or computer does the work.</p>
 <div class="drop" id="drop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
@@ -260,7 +260,7 @@ const char WEB_BOOKS_UPLOAD[] PROGMEM = R"HTML(<div class="card"><h2>Add books</
 <div id="queue"></div></div>
 )HTML";
 
-// ---------- Strona "Sleep image": formularz ----------
+// ---------- "Sleep image" page: form ----------
 const char WEB_WP_BODY[] PROGMEM = R"HTML(<div class="card"><h2>Sleep image</h2>
 <p class="sub">Shown when the reader goes to sleep (Settings &rarr; Sleep screen: Image). Any picture works; it is converted to black &amp; white at 250&times;122 pixels.</p>
 <input id="img" class="plain" type="file" accept="image/*">

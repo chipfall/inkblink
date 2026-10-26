@@ -1,20 +1,20 @@
 #pragma once
 // ============================================================
-//  Dzielenie wyrazow polskich (reguly, bez slownika).
+//  Polish hyphenation (rules, no dictionary).
 //
-//  hyphenPoints() zwraca miejsca (przesuniecia w bajtach od poczatku wyrazu), w ktorych
-//  wolno wstawic myslnik. Wyraz musi skladac sie z liter (ASCII + polskie).
+//  hyphenPoints() returns the places (byte offsets from the start of the word) where
+//  a hyphen may be inserted. The word must consist of letters (ASCII + Polish).
 //
-//  Zasady (uproszczone, zgodne z typowym podzialem na sylaby):
-//   - sylaba ma jedna samogloske (a e i o u y ą ę ó); "i" przed samogloska to zmiekczenie
-//     (miasto = mia-sto, ciemny = cie-mny), a nie osobna sylaba,
-//   - dwuznaki cz sz rz ch dz dź dż nie sa rozdzielane,
-//   - miedzy dwiema samogloskami: przerwa miedzy nimi (po-eta, na-uka),
-//   - jedna spolgloska miedzy samogloskami idzie do nastepnej sylaby (ma-ma),
-//   - grupa spolglosek: do nastepnej sylaby idzie najdluzszy koniec grupy, ktory moze zaczynac
-//     sylabe (st sp sk zw sł tr dr pl kr ... str spr), reszta zostaje (pol-ska, kost-ka, wie-trze),
-//   - po obu stronach myslnika zostaja co najmniej 2 litery; wyrazy krotsze niz 6 liter oraz
-//     wyrazy z wielkimi literami w srodku (skroty) nie sa dzielone.
+//  Rules (simplified, following the usual division into syllables):
+//   - a syllable has one vowel (a e i o u y ą ę ó); "i" before a vowel only softens the consonant
+//     (miasto = mia-sto, ciemny = cie-mny) and is not a separate syllable,
+//   - the digraphs cz sz rz ch dz dź dż are never split,
+//   - between two vowels: the break goes between them (po-eta, na-uka),
+//   - a single consonant between vowels goes to the next syllable (ma-ma),
+//   - a consonant cluster: the longest end of the cluster that can start a syllable goes to the next
+//     syllable (st sp sk zw sł tr dr pl kr ... str spr), the rest stays (pol-ska, kost-ka, wie-trze),
+//   - at least 2 letters stay on each side of the hyphen; words shorter than 6 letters and
+//     words with capitals in the middle (abbreviations) are not split.
 // ============================================================
 #include <stdint.h>
 #include <string.h>
@@ -54,7 +54,7 @@ static inline bool hyIsVowel(uint32_t lc) {
   return lc == 'a' || lc == 'e' || lc == 'i' || lc == 'o' || lc == 'u' || lc == 'y' ||
          lc == 0x0105 || lc == 0x0119 || lc == 0x00F3;
 }
-// jedna litera -> znak ASCII uzywany w opisie jednostek spolgloskowych
+// one letter -> ASCII character used to describe consonant units
 static inline char hySym(uint32_t lc) {
   switch (lc) {
     case 0x0107: return 'C';  // ć
@@ -67,7 +67,7 @@ static inline char hySym(uint32_t lc) {
   return (char)lc;
 }
 
-// ---------- klasy spolglosek (tekst jednostki, np. "tr" nie, tylko pojedyncza jednostka: "t", "rz", "ch") ----------
+// ---------- consonant classes (unit text: not "tr", only single units: "t", "rz", "ch") ----------
 static inline bool hyIn(const char* u, const char* const* set) {
   for (; *set; set++) if (strcmp(u, *set) == 0) return true;
   return false;
@@ -76,10 +76,10 @@ static const char* const HY_STOP[] = { "p", "b", "t", "d", "k", "g", nullptr };
 static const char* const HY_OBSTR[] = { "p", "b", "t", "d", "k", "g", "f", "w", "ch", "c", "dz", "cz", "h", "dX", "dJ", "C", nullptr };
 static const char* const HY_LIQ[] = { "r", "l", "rz", "L", nullptr };
 static const char* const HY_SIB[] = { "s", "z", "sz", "J", "S", "X", nullptr };
-static const char* const HY_SIB_VL[] = { "s", "sz", "S", nullptr };          // bezdzwieczne
-static const char* const HY_SIB_VD[] = { "z", "J", "X", nullptr };           // dzwieczne
+static const char* const HY_SIB_VL[] = { "s", "sz", "S", nullptr };          // voiceless
+static const char* const HY_SIB_VD[] = { "z", "J", "X", nullptr };           // voiced
 static const char* const HY_AFTER_VL[] = { "p", "t", "k", "m", "n", "w", "L", "l", "f", "c", "ch", "N", nullptr };
-static const char* const HY_AFTER_VD[] = { "b", "d", "g", "m", "n", "w", "L", "l", "N", nullptr };   // "zp" nie zaczyna sylaby (bez-pie-czny)
+static const char* const HY_AFTER_VD[] = { "b", "d", "g", "m", "n", "w", "L", "l", "N", nullptr };   // "zp" does not start a syllable (bez-pie-czny)
 
 static inline bool hyOnset2(const char* a, const char* b) {
   return (hyIn(a, HY_OBSTR) && hyIn(b, HY_LIQ)) || (hyIn(a, HY_SIB_VL) && hyIn(b, HY_AFTER_VL)) ||
@@ -92,7 +92,7 @@ static inline bool hyOnset3(const char* a, const char* b, const char* c) {
          (strcmp(c, "t") == 0 || strcmp(c, "cz") == 0 || strcmp(c, "k") == 0 || strcmp(c, "p") == 0);
 }
 
-// Zwraca liczbe punktow podzialu (maks. maxPts); pts[] rosnaco, w bajtach od poczatku wyrazu.
+// Returns the number of break points (max maxPts); pts[] ascending, in bytes from the start of the word.
 inline int hyphenPoints(const char* w, int len, uint8_t* pts, int maxPts) {
   uint16_t L[HY_MAXL + 1];
   uint8_t bpos[HY_MAXL + 2];
@@ -106,7 +106,7 @@ inline int hyphenPoints(const char* w, int len, uint8_t* pts, int maxPts) {
     else return 0;
     uint16_t lc = hyLower(cp);
     if (!hyIsLetter(lc)) return 0;
-    if (n > 0 && hyIsUpper(cp)) return 0;          // skrot / nazwa z wielka litera w srodku
+    if (n > 0 && hyIsUpper(cp)) return 0;          // abbreviation / name with a capital in the middle
     if (n >= HY_MAXL) return 0;
     L[n] = lc;
     bpos[n] = (uint8_t)i;
@@ -116,7 +116,7 @@ inline int hyphenPoints(const char* w, int len, uint8_t* pts, int maxPts) {
   bpos[n] = (uint8_t)len;
   if (n < HY_MIN_WORD) return 0;
 
-  // ---- jednostki: samogloska albo spolgloska (z dwuznakiem i zmiekczajacym "i") ----
+  // ---- units: a vowel or a consonant (with a digraph and a softening "i") ----
   struct Unit { uint8_t start; uint8_t nl; bool vowel; char base[4]; };
   Unit U[HY_MAXL + 1];
   int nu = 0;
@@ -139,27 +139,27 @@ inline int hyphenPoints(const char* w, int len, uint8_t* pts, int maxPts) {
       for (int j = 0; j < k && bl < 3; j++) u.base[bl++] = hySym(L[i + j]);
       u.base[bl] = 0;
       i += k;
-      // zmiekczajace "i" tuz przed samogloska nalezy do spolgloski (mia-sto)
+      // a softening "i" right before a vowel belongs to the consonant (mia-sto)
       if (i + 1 < n && L[i] == 'i' && hyIsVowel(L[i + 1])) { k++; i++; }
       u.nl = (uint8_t)k;
     }
     U[nu++] = u;
   }
 
-  // ---- punkty podzialu pomiedzy kolejnymi samogloskami ----
-  bool brk[HY_MAXL + 1];                 // brk[l] = mozna przerwac po l literach
+  // ---- break points between consecutive vowels ----
+  bool brk[HY_MAXL + 1];                 // brk[l] = a break is allowed after l letters
   for (int i = 0; i <= n; i++) brk[i] = false;
   int prevV = -1;
   for (int ui = 0; ui < nu; ui++) {
     if (!U[ui].vowel) continue;
     if (prevV >= 0) {
-      int cs = prevV + 1, ce = ui;       // spolgloski: jednostki cs .. ce-1
+      int cs = prevV + 1, ce = ui;       // consonants: units cs .. ce-1
       int k = ce - cs;
-      int breakUnit;                     // przerwa tuz przed ta jednostka
+      int breakUnit;                     // the break comes right before this unit
       if (k == 0) {
-        // dwie samogloski obok siebie; "au"/"eu" na poczatku wyrazu to dyftong
+        // two vowels next to each other; "au"/"eu" at the start of a word is a diphthong
         bool diph = (prevV == 0 && ui == 1 && (L[0] == 'a' || L[0] == 'e') && L[1] == 'u');
-        bool same = L[U[prevV].start] == L[U[ui].start];      // aa, ee: nie dzielimy (Nilfgaard)
+        bool same = L[U[prevV].start] == L[U[ui].start];      // aa, ee: not split (Nilfgaard)
         breakUnit = (diph || same) ? -1 : ui;
       } else if (k == 1) {
         breakUnit = cs;
@@ -168,8 +168,8 @@ inline int hyphenPoints(const char* w, int len, uint8_t* pts, int maxPts) {
         if (k >= 3 && hyOnset3(U[ce - 3].base, U[ce - 2].base, U[ce - 1].base)) m = 3;
         else if (hyOnset2(U[ce - 2].base, U[ce - 1].base)) m = 2;
         breakUnit = ce - m;
-        // zadna grupa nie zaczyna sie od samej siebie poza pierwszym wyrazem: gdy cala grupa jest
-        // poczatkiem sylaby (m == k), przerwa jest tuz za samogloska
+        // no cluster starts with itself except for the first word: when the whole cluster can
+        // start a syllable (m == k), the break comes right after the vowel
         if (m == k) breakUnit = cs;
       }
       if (breakUnit >= 0) brk[U[breakUnit].start] = true;

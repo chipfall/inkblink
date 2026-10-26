@@ -1,29 +1,29 @@
 // ============================================================
 //  InkBlink - e-book reader firmware for the CrowPanel ESP32 2.13" e-paper (DIE01021S)
 //  Menu, Library, Reader, Statistics, Settings, Upload (own WiFi hotspot + web page)
-//  Ksiazki (.txt) leza w LittleFS, czytane strona po stronie.
+//  Books (.txt) live in LittleFS and are read page by page.
 //
-//  Zmiany 0.8:
-//   - hotspot: kody QR (dolaczenie do sieci i otwarcie strony), ikona WiFi
-//   - strona WWW po angielsku, nowy wyglad, wysylanie wielu plikow z paskiem postepu,
-//     obraz uspienia wgrywany przez przegladarke
-//   - wskaznik baterii (po ustawieniu pinu w board_crowpanel.h), test pinow w Info
-//   - ekran uspienia: karta ksiazki / obraz / bez zmian
-//   - statystyki: czas czytania, tempo, przewidywany czas do konca ksiazki
-//   - szybkie przewracanie stron (eksperyment): odswiezanie czesciowe
+//  Changes in 0.8:
+//   - hotspot: QR codes (join the network, open the page), WiFi icon
+//   - web page in English, new look, multi-file upload with a progress bar,
+//     sleep image uploaded through the browser
+//   - battery indicator (once the pin is set in board_crowpanel.h), pin test
+//   - sleep screen: book card / image / unchanged
+//   - statistics: reading time, speed, estimated time to the end of the book
+//   - fast page flip (experiment): partial refresh
 //
-//  Zmiany 0.7: licznik telefonow i zadan na ekranie hotspotu, diagnostyka.
-//  Zmiany 0.6: legenda klawiszy, upload tylko przez hotspot.
-//  Zmiany 0.5: czcionki, nawigacja z przytrzymaniem. 0.4: polskie znaki, ustawienia.
+//  Changes in 0.7: phone and request counters on the hotspot screen, diagnostics.
+//  Changes in 0.6: key legend, upload only through the hotspot.
+//  Changes in 0.5: fonts, hold-to-repeat navigation. 0.4: Polish characters, settings.
 // ============================================================
 
-// 1 = rodziny Helvetica i Unifont (potrzebne biblioteki: Adafruit GFX Library
-// oraz U8g2_for_Adafruit_GFX). 0 = tylko Classic, bez dodatkowych bibliotek.
+// 1 = Helvetica and Unifont families (needs the libraries Adafruit GFX Library
+// and U8g2_for_Adafruit_GFX). 0 = Classic only, no extra libraries.
 #define USE_U8G2 1
 
 #include <Arduino.h>
 #if USE_U8G2
-#include <Adafruit_GFX.h>              // musza byc PRZED naszymi naglowkami (makra BLACK/WHITE)
+#include <Adafruit_GFX.h>              // must come BEFORE our headers (BLACK/WHITE macros)
 #include <U8g2_for_Adafruit_GFX.h>
 #endif
 #include <WiFi.h>
@@ -34,144 +34,144 @@
 #include <Preferences.h>
 #include <strings.h>
 
-#include "qr.h"                 // generator kodow QR
-#include "board_crowpanel.h"    // piny, przyciski, rysowanie, bateria
-#include "ui_gfx.h"             // ikony, kod QR, prostokaty
-#include "input.h"              // zdarzenia przyciskow
+#include "qr.h"                 // QR code generator
+#include "board_crowpanel.h"    // pins, buttons, drawing, battery
+#include "ui_gfx.h"             // icons, QR code, rectangles
+#include "input.h"              // button events
 #include "clock.h"
 #include "hyphen.h"
 #include "battery_model.h"
-#include "reader_fonts.h"       // czcionki ksiazki
-#include "webui_assets.h"       // strona WWW (HTML/CSS/JS)
+#include "reader_fonts.h"       // book fonts
+#include "webui_assets.h"       // web page (HTML/CSS/JS)
 
-#define FW_VERSION "0.9.12"         // 0.9.N = paczka/update N (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
+#define FW_VERSION "0.9.14"         // 0.9.N = package/update N (see docs/DEVELOPMENT.md); must match CHANGELOG.md
 
-// ---------- Ustawienia ekranu / interfejsu ----------
-#define FONT_SIZE 16            // czcionka interfejsu (menu, komunikaty)
-#define FOOT_SIZE 12            // czcionka paska stanu
-#define UI_CHARS 24             // maks. znakow w wierszu interfejsu (miesci sie przed legenda)
-#define UI_X 4                  // lewy margines interfejsu (px)
+// ---------- Screen / interface settings ----------
+#define FONT_SIZE 16            // interface font (menus, messages)
+#define FOOT_SIZE 12            // status line font
+#define UI_CHARS 24             // max characters in an interface line (fits before the key legend)
+#define UI_X 4                  // left margin of the interface (px)
 #define LIST_ROWS 6
-#define MARGIN_X 6              // lewy/prawy margines tekstu ksiazki (px)
-#define STATUS_Y 112            // gorna krawedz paska stanu (px)
+#define MARGIN_X 6              // left/right margin of the book text (px)
+#define STATUS_Y 112            // top edge of the status line (px)
 
-// ---------- Limity ----------
-#define MAX_PAGES_CAP 60000     // 60000 stron = 240 KB RAM na offsety
+// ---------- Limits ----------
+#define MAX_PAGES_CAP 60000     // 60000 pages = 240 KB of RAM for offsets
 #define MAX_BOOKS 40
-#define MAX_CH 300                // maks. liczba rozdzialow w spisie tresci
-#define TOC_MAX_BYTES 24000       // maks. rozmiar pliku .toc
+#define MAX_CH 300                // max number of chapters in the table of contents
+#define TOC_MAX_BYTES 24000       // max size of a .toc file
 #define NAME_LEN 48
-#define PAGE_BUF 1536           // bajtow na strone (UTF-8 bywa 2-4 bajty/znak)
+#define PAGE_BUF 1536           // bytes per page (UTF-8 can take 2-4 bytes per character)
 #define CHUNK_BUF 4096
 
-// ---------- Cache indeksu ----------
+// ---------- Index cache ----------
 #define USE_INDEX_CACHE 1
-#define INDEX_MIN_BOOK 100000   // mniejszych ksiazek nie cache'ujemy
+#define INDEX_MIN_BOOK 100000   // smaller books are not cached
 #define IDX_MAGIC 0x58444945UL
-#define HYPHEN_VERSION 2       // zmien, gdy zmienisz reguly dzielenia wyrazow
-#define WRAP_VERSION 5          // zmien, gdy zmienisz algorytm zawijania lub marginesy (5: nowy pomiar szerokosci znakow)
+#define HYPHEN_VERSION 2       // change when the hyphenation rules change
+#define WRAP_VERSION 5          // change when the wrapping algorithm or margins change (5: new character width measurement)
 
 #define TMP_PATH "/upload.tmp"
 
 // ---------- Hotspot ----------
-#define AP_SSID_PREFIX "InkBlink-"  // nazwa sieci: InkBlink-XXXX (koncowka z adresu plytki)
-#define AP_CHANNEL 1                // kanal WiFi hotspotu (1-13); przy zakloceniach sprobuj 6 lub 11
-#define CAPTIVE_TRICKS 1            // 1 = DNS + odpowiedzi testow lacznosci (patrz handleNotFound)
+#define AP_SSID_PREFIX "InkBlink-"  // network name: InkBlink-XXXX (suffix from the board address)
+#define AP_CHANNEL 1                // WiFi channel of the hotspot (1-13); with interference try 6 or 11
+#define CAPTIVE_TRICKS 1            // 1 = DNS + answers to connectivity checks (see handleNotFound)
 
-// ---------- Obraz uspienia ----------
+// ---------- Sleep image ----------
 #define WALLPAPER_PATH "/wallpaper.bin"
 #define WP_TMP "/wp.tmp"
-#define WALLPAPER_BYTES 3904        // 32 bajty na wiersz * 122 wiersze (250 px, najstarszy bit pierwszy, 1 = tusz)
+#define WALLPAPER_BYTES 3904        // 32 bytes per row * 122 rows (250 px, most significant bit first, 1 = ink)
 
-// ---------- Bateria / statystyki ----------
-#define BAT_LOW_PCT 20              // ponizej tego poziomu ikona pokazuje sie tez w trybie "Low"
-#define STATS_MAX_GAP_S 180         // dluzsza przerwa miedzy stronami nie liczy sie jako czytanie
-#define STATS_MIN_TURN_S 2          // szybsze przewracanie to przegladanie, nie liczy sie do tempa
-#define STATS_SAVE_EVERY 25         // zapis statystyk co tyle przewroconych stron
+// ---------- Battery / statistics ----------
+#define BAT_LOW_PCT 20              // below this level the icon is also shown in "Low" mode
+#define STATS_MAX_GAP_S 180         // a longer pause between pages does not count as reading
+#define STATS_MIN_TURN_S 2          // faster page turns are browsing and do not count towards the speed
+#define STATS_SAVE_EVERY 25         // statistics are saved every this many page turns
 
 typedef const char* (*ItemFn)(int);
 
-// Statystyki czytania (struktury musza byc przed pierwsza funkcja - patrz uwaga o ItemFn)
+// Reading statistics (the structs must come before the first function - see the note about ItemFn)
 struct BookStats {
-  uint32_t secs;       // czas czytania tej ksiazki (s)
-  uint32_t spdBytes;   // bajty przeczytane strona po stronie (do tempa)
-  uint32_t spdSecs;    // czas, w ktorym je przeczytano
-  uint32_t pages;      // przewrocone strony
-  uint8_t done;        // 1 = skonczona (>= 98%)
+  uint32_t secs;       // reading time of this book (s)
+  uint32_t spdBytes;   // bytes read page by page (for the speed)
+  uint32_t spdSecs;    // time it took to read them
+  uint32_t pages;      // pages turned
+  uint8_t done;        // 1 = finished (>= 98%)
   uint8_t pad[3];
 };
 struct TotalStats {
   uint32_t secs, spdBytes, spdSecs, pages;
-  uint16_t finished;   // skonczone ksiazki
+  uint16_t finished;   // finished books
   uint16_t pad;
 };
 
 // ============================================================
-//  Ustawienia uzytkownika (zapisywane w pamieci nieulotnej)
+//  User settings (stored in non-volatile memory)
 // ============================================================
-static const uint8_t sleepMinutes[5] = { 1, 5, 10, 30, 0 };   // 0 = nigdy
-static const uint8_t fullEveryVals[3] = { 5, 10, 20 };        // co ile stron pelne odswiezenie
-static const uint8_t marginVals[3] = { 8, 4, 14 };               // marginesy tekstu (px): Normal, Narrow, Wide
-static const uint8_t lineGapVals[3] = { 0, 2, 4 };               // interlinia: dodatkowe px miedzy wierszami
+static const uint8_t sleepMinutes[5] = { 1, 5, 10, 30, 0 };   // 0 = never
+static const uint8_t fullEveryVals[3] = { 5, 10, 20 };        // full refresh every N pages
+static const uint8_t marginVals[3] = { 8, 4, 14 };               // text margins (px): Normal, Narrow, Wide
+static const uint8_t lineGapVals[3] = { 0, 2, 4 };               // line spacing: extra px between lines
 
 struct Settings {
-  uint8_t famIdx;      // rodzina czcionki (FAM_*)
-  uint8_t fontIdx;     // indeks rozmiaru w rodzinie
-  bool bold;           // pogrubienie
-  bool showPct;        // procent postepu w pasku stanu
-  bool showPage;       // numer strony n/N w pasku stanu
-  bool showLeft;       // przewidywany czas do konca ksiazki
-  bool showBar;        // pasek postepu (wypelnia reszte linii)
-  uint8_t batMode;     // bateria w ksiazce: 0 wylaczona, 1 tylko gdy niski poziom, 2 zawsze
-  bool fastFlip;       // szybkie przewracanie stron (eksperyment)
-  uint8_t fullEvery;   // indeks w fullEveryVals
-  uint8_t sleepIdx;    // indeks w sleepMinutes
-  uint8_t sleepScreen; // ekran uspienia: 0 karta ksiazki (Book info), 1 obraz, 2 biezaca strona
-  bool autoOpen;       // po starcie otworz ostatnia ksiazke
-  uint8_t margin;      // margines tekstu: 0 normalny, 1 waski, 2 szeroki (marginVals)
-  uint8_t lineGap;     // interlinia: indeks w lineGapVals
-  bool hyphen;         // automatyczne przenoszenie wyrazow
-  uint8_t clockMode;   // zegar: 0 wylaczony, 1 24h, 2 12h
-  bool clockBook;      // zegar w pasku stanu w ksiazce
-  uint8_t tz;          // strefa czasowa (indeks w TZS)
-  bool fastMenu;       // szybkie (bez migania) odswiezanie list w menu
-  uint8_t uiFont;      // czcionka menu i naglowkow: 0 Classic, 2 Helvetica 12 (1 = dawne Helvetica 14 i 3 = dawny Unifont, traktowane jak 2)
-  uint8_t apPower;     // moc nadawania hotspotu: 0 niska (8,5 dBm), 1 srednia (13 dBm), 2 wysoka (19,5 dBm)
-  uint8_t powerSave;   // oszczedzanie energii: 0 wylaczone, 1 procesor 80 MHz, 2 lekkie uspienie w bezczynnosci
-  bool battEst;        // szacowanie baterii (plytka nie ma czujnika)
-  uint8_t battCap;     // pojemnosc ogniwa: indeks w BM_CAPS
+  uint8_t famIdx;      // font family (FAM_*)
+  uint8_t fontIdx;     // size index within the family
+  bool bold;           // bold
+  bool showPct;        // progress percentage in the status line
+  bool showPage;       // page number n/N in the status line
+  bool showLeft;       // estimated time to the end of the book
+  bool showBar;        // progress bar (fills the rest of the line)
+  uint8_t batMode;     // battery in the book: 0 off, 1 only when low, 2 always
+  bool fastFlip;       // fast page flip (partial refresh)
+  uint8_t fullEvery;   // index into fullEveryVals
+  uint8_t sleepIdx;    // index into sleepMinutes
+  uint8_t sleepScreen; // sleep screen (Cover): 0 book card (Book info), 1 image, 2 current page
+  bool autoOpen;       // open the last book after start
+  uint8_t margin;      // text margin: 0 normal, 1 narrow, 2 wide (marginVals)
+  uint8_t lineGap;     // line spacing: index into lineGapVals
+  bool hyphen;         // automatic hyphenation
+  uint8_t clockMode;   // clock: 0 off, 1 24h, 2 12h
+  bool clockBook;      // clock in the status line of a book
+  uint8_t tz;          // time zone (index into TZS)
+  bool fastMenu;       // fast (no flash) refresh of menu lists
+  uint8_t uiFont;      // menu and title font: 0 Classic, 2 Helvetica 12 (1 = former Helvetica 14 and 3 = former Unifont, treated as 2)
+  uint8_t apPower;     // hotspot transmit power: 0 low (8.5 dBm), 1 medium (13 dBm), 2 high (19.5 dBm)
+  uint8_t powerSave;   // power saving: 0 off, 1 processor 80 MHz, 2 light sleep when idle
+  bool battEst;        // battery estimate (the board has no sensor)
+  uint8_t battCap;     // cell capacity: index into BM_CAPS
 };
 Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 2, 1, 2, true, 2 };
-bool devMode = false;    // ukryte opcje (Developer): wlaczane przytrzymaniem MENU przez 10 s w menu glownym
+bool devMode = false;    // hidden options (Developer): toggled by holding MENU for 10 s in the main menu
 
-// Czy pasek stanu w ogole jest rysowany (wplywa na uklad strony, wiec bateria go nie zmienia)
-// Czy wlaczona jest choc jedna pozycja paska stanu (glowny przelacznik "Status line" pokazuje ten stan)
+// Is the status line drawn at all (affects the page layout, so the battery does not change it)
+// Is at least one status line item on (the main "Status line" switch shows this state)
 bool statusAnyOn() {
   return cfg.showPct || cfg.showPage || cfg.showLeft || cfg.showBar || cfg.clockBook || cfg.batMode > 0;
 }
-// Glowny przelacznik: wlacza albo wylacza wszystkie podopcje paska stanu naraz
+// Main switch: turns all status line items on or off at once
 void statusSetAll(bool on) {
   cfg.showPct = cfg.showPage = cfg.showLeft = cfg.showBar = cfg.clockBook = on;
-  cfg.batMode = on ? 1 : 0;                  // 1 = Low (bateria tylko, gdy jest niska)
+  cfg.batMode = on ? 1 : 0;                  // 1 = Low (battery only when it is low)
 }
 
 bool statusVisible() {
   return cfg.showPct || cfg.showPage || cfg.showLeft || cfg.showBar || (cfg.clockMode > 0 && cfg.clockBook);
 }
 
-// ---------- Biezacy uklad strony (ustawiany przez applyLayout) ----------
+// ---------- Current page layout (set by applyLayout) ----------
 int linesPerPage = 7;
-int maxTextW = SCREEN_W - 2 * MARGIN_X;   // szerokosc tekstu w pikselach
+int maxTextW = SCREEN_W - 2 * MARGIN_X;   // text width in pixels
 int textX0 = MARGIN_X;
 
 void applyLayout() {
   if (cfg.famIdx >= fontFamilyCount()) cfg.famIdx = FAM_CLASSIC;
-  if (cfg.fontIdx >= fontSizeCount(cfg.famIdx)) cfg.fontIdx = fontSizeCount(cfg.famIdx) - 1;   // np. dawne 24/32 px -> najwiekszy dostepny
+  if (cfg.fontIdx >= fontSizeCount(cfg.famIdx)) cfg.fontIdx = fontSizeCount(cfg.famIdx) - 1;   // e.g. former 24/32 px -> the largest available
   if (cfg.margin > 2) cfg.margin = 0;
   if (cfg.lineGap > 2) cfg.lineGap = 0;
   if (cfg.clockMode > 2) cfg.clockMode = 0;
   if (cfg.tz >= TZ_COUNT) cfg.tz = 0;
-  if (cfg.uiFont == 1 || cfg.uiFont == 3) cfg.uiFont = 2;   // dawne Helvetica 14 (zbyt ciasne) i Unifont (usuniety)
+  if (cfg.uiFont == 1 || cfg.uiFont == 3) cfg.uiFont = 2;   // former Helvetica 14 (too tight) and Unifont (removed)
   if (cfg.uiFont > 3) cfg.uiFont = 0;
   if (cfg.apPower > 2) cfg.apPower = 1;
   if (cfg.powerSave > 2) cfg.powerSave = 0;
@@ -182,10 +182,10 @@ void applyLayout() {
   int mx = marginVals[cfg.margin];
   int areaW = SCREEN_W - 2 * mx;
   int fw = fontFixedW();
-  if (fw > 0) {                      // stala szerokosc: wysrodkuj reszte
+  if (fw > 0) {                      // fixed width: centre the rest
     maxTextW = (areaW / fw) * fw;
     textX0 = mx + (areaW - maxTextW) / 2;
-  } else {                           // proporcjonalna
+  } else {                           // proportional
     maxTextW = areaW;
     textX0 = mx;
   }
@@ -194,7 +194,7 @@ void applyLayout() {
   if (linesPerPage < 1) linesPerPage = 1;
 }
 
-// Podpis ukladu: ksiazka paginuje sie inaczej dla kazdej kombinacji ustawien
+// Layout signature: a book paginates differently for every combination of settings
 uint32_t layoutSig() {
   uint32_t h = 2166136261UL;
   uint32_t parts[10] = { (uint32_t)cfg.famIdx, (uint32_t)cfg.fontIdx, (uint32_t)cfg.bold,
@@ -206,18 +206,18 @@ uint32_t layoutSig() {
 }
 
 // ============================================================
-//  Zawijanie tekstu (jedna funkcja dla indeksowania i rysowania)
-//  Liczy SZEROKOSC W PIKSELACH, nie tnie sekwencji UTF-8 w polowie.
+//  Text wrapping (one function for indexing and drawing)
+//  Measures WIDTH IN PIXELS and never splits a UTF-8 sequence.
 // ============================================================
 inline int charBytes(uint8_t c) {
   if (c < 0x80) return 1;
   if ((c & 0xE0) == 0xC0) return 2;
   if ((c & 0xF0) == 0xE0) return 3;
   if ((c & 0xF8) == 0xF0) return 4;
-  return 1;                       // zagubiony bajt kontynuacji
+  return 1;                       // stray continuation byte
 }
 
-// Szerokosc (px) pierwszych len bajtow napisu
+// Width (px) of the first len bytes of a string
 int textWidthPx(const char* t, int len) {
   int w = 0, i = 0;
   while (i < len) {
@@ -231,8 +231,8 @@ int textWidthPx(const char* t, int len) {
   return w;
 }
 
-// Probuje podzielic wyraz, ktory sie nie miesci (poczatek wyrazu: ws bajtow od pos).
-// Zwraca true i ustawia outBytes (dlugosc wiersza) oraz needHyphen (czy dorysowac myslnik).
+// Tries to split a word that does not fit (the word starts ws bytes from pos).
+// Returns true and sets outBytes (line length) and needHyphen (whether to draw a hyphen).
 bool tryHyphenate(const char* t, int pos, int ws, int& outBytes, bool& needHyphen) {
   const char* w = t + pos + ws;
   int we = 0;
@@ -241,13 +241,13 @@ bool tryHyphenate(const char* t, int pos, int ws, int& outBytes, bool& needHyphe
     if (c == '\0' || c == ' ' || c == '\n' || c == '\r') break;
     we++;
   }
-  // kandydaci: (przesuniecie od poczatku wyrazu, czy wymaga myslnika)
+  // candidates: (offset from the start of the word, needs a hyphen)
   uint8_t candOff[24];
   bool candHy[24];
   int nc = 0;
   int i = 0;
   while (i < we && nc < 22) {
-    // segment liter: od i do pierwszego znaku niebedacego litera (-, znak interpunkcyjny...)
+    // run of letters: from i to the first non-letter character (-, punctuation...)
     int j = i;
     while (j < we) {
       uint8_t c = (uint8_t)w[j];
@@ -265,7 +265,7 @@ bool tryHyphenate(const char* t, int pos, int ws, int& outBytes, bool& needHyphe
       i = j;
     }
     if (i < we) {
-      if (w[i] == '-' && i + 1 < we && i > 0 && nc < 22) { candOff[nc] = (uint8_t)(i + 1); candHy[nc++] = false; }   // juz jest myslnik w tekscie
+      if (w[i] == '-' && i + 1 < we && i > 0 && nc < 22) { candOff[nc] = (uint8_t)(i + 1); candHy[nc++] = false; }   // the text already has a hyphen here
       i += charBytes((uint8_t)w[i]);
     }
   }
@@ -281,34 +281,34 @@ bool tryHyphenate(const char* t, int pos, int ws, int& outBytes, bool& needHyphe
   return false;
 }
 
-#define HY_MAX_RUN 2                  // najwyzej tyle kolejnych wierszy zakonczonych myslnikiem
-int hyRun = 0;                         // biezacy ciag takich wierszy; zerowany na poczatku kazdej strony
+#define HY_MAX_RUN 2                  // at most this many consecutive lines ending with a hyphen
+int hyRun = 0;                         // current run of such lines; reset at the start of every page
 
-// Rdzen zawijania: dlugosc wiersza w bajtach; hyph = po wierszu trzeba dorysowac myslnik.
+// Wrapping core: line length in bytes; hyph = a hyphen must be drawn after the line.
 int layoutLine(const char* t, int pos, int& advance, bool& hyph) {
   hyph = false;
   int bytes = 0;
   int w = 0;
-  int lastSpace = -1;             // pozycja (w bajtach) ostatniej spacji
+  int lastSpace = -1;             // position (in bytes) of the last space
 
   for (;;) {
     uint8_t c = (uint8_t)t[pos + bytes];
     if (c == '\0' || c == '\n' || c == '\r') break;
     int cb = charBytes(c);
-    for (int k = 1; k < cb; k++) {            // ucieta sekwencja na koncu bufora
+    for (int k = 1; k < cb; k++) {            // sequence cut off at the end of the buffer
       if (t[pos + bytes + k] == '\0') { cb = k; break; }
     }
     uint32_t cp;
     gfxU8Decode(t + pos + bytes, cb, cp);
     int cw = fontCharW(cp);
-    if (w + cw > maxTextW && bytes > 0) break;   // nie miesci sie
+    if (w + cw > maxTextW && bytes > 0) break;   // does not fit
     if (c == ' ') lastSpace = bytes;
     bytes += cb;
     w += cw;
   }
 
   char next = t[pos + bytes];
-  // wyraz sie nie miesci: podziel go (jesli wlaczone), a w ostatecznosci przenies do nastepnej linii
+  // the word does not fit: split it (if enabled), as a last resort move it to the next line
   if (next != '\0' && next != '\n' && next != '\r' && next != ' ') {
     bool done = false;
     if (cfg.hyphen && hyRun < HY_MAX_RUN) {
@@ -348,7 +348,7 @@ int consumePage(const char* t) {
   return pos;
 }
 
-// NUL i tab -> spacja (spojne zachowanie przy indeksowaniu i rysowaniu)
+// NUL and tab -> space (same behaviour when indexing and drawing)
 void sanitizeBuf(char* b, int n) {
   for (int i = 0; i < n; i++) {
     if (b[i] == '\0' || b[i] == '\t') b[i] = ' ';
@@ -356,17 +356,17 @@ void sanitizeBuf(char* b, int n) {
 }
 
 // ============================================================
-//  Narzedzia: nazwy plikow, klucze
+//  Tools: file names, keys
 // ============================================================
 bool endsWithTxt(const char* s) {
   size_t l = strlen(s);
   return l > 4 && strcasecmp(s + l - 4, ".txt") == 0;
 }
 
-// Bezpieczna nazwa ksiazki: bez sciezek, tylko [0-9A-Za-z._-], zawsze konczy sie
-// na .txt (trzon przycinany, rozszerzenie nie). Polskie litery sa
-// transliterowane (ą -> a), inne niedozwolone znaki zamieniane na '_'.
-// Zwraca false, gdy to nie .txt.
+// Safe book name: no paths, only [0-9A-Za-z._-], always ends
+// in .txt (the stem is shortened, the extension is not). Polish letters are
+// transliterated (ą -> a), other characters that are not allowed become '_'.
+// Returns false when it is not a .txt file.
 static bool makeNameExt(const char* in, char* out, const char* ext) {
   const char* b = in;
   const char* s = strrchr(b, '/');
@@ -377,7 +377,7 @@ static bool makeNameExt(const char* in, char* out, const char* ext) {
   int l = (int)strlen(b);
   if (l <= 4 || strcasecmp(b + l - 4, ext) != 0) return false;
 
-  int end = l - 4;               // koniec trzonu (bez rozszerzenia)
+  int end = l - 4;               // end of the stem (without the extension)
   int i = 0, j = 0;
   while (i < end && j < NAME_LEN - 5) {
     uint32_t cp;
@@ -398,18 +398,18 @@ static bool makeNameExt(const char* in, char* out, const char* ext) {
     out[j++] = ok ? c : '_';
   }
   if (j == 0) out[j++] = '_';
-  memcpy(out + j, ext, 5);       // razem z '\0'
+  memcpy(out + j, ext, 5);       // including '\0'
   return true;
 }
 
 bool makeBookName(const char* in, char* out) {
   return makeNameExt(in, out, ".txt");
 }
-// Spis tresci (rozdzialy) ksiazki: ta sama nazwa, rozszerzenie .toc (tworzy go strona WWW przy imporcie EPUB)
+// Table of contents (chapters) of a book: same name, extension .toc (made by the web page when importing an EPUB)
 bool makeTocName(const char* in, char* out) {
   return makeNameExt(in, out, ".toc");
 }
-// "/Nazwa.toc" dla ksiazki "Nazwa.txt"
+// "/Name.toc" for the book "Name.txt"
 void tocPathFor(const char* bookName, char* out, size_t n) {
   size_t l = strlen(bookName);
   if (l > 4 && l + 1 < n) {
@@ -424,7 +424,7 @@ const char* baseName(const char* p) {
   return s ? s + 1 : p;
 }
 
-// nazwa bez .txt, przycieta do maxChars
+// name without .txt, cut to maxChars
 void shortName(const char* name, char* out, int maxChars) {
   int l = (int)strlen(name);
   if (endsWithTxt(name)) l -= 4;
@@ -439,18 +439,18 @@ uint32_t nameHash(const char* name) {
   return h;
 }
 
-// Klucz zakladki: nazwa + rozmiar (podmieniona ksiazka nie dziedziczy starej pozycji)
+// Bookmark key: name + size (a replaced book does not inherit the old position)
 void bmKey(const char* name, uint32_t size, char* key) {
   uint32_t h = nameHash(name) ^ (size * 2654435761UL);
   snprintf(key, 16, "o%08lx", (unsigned long)h);
 }
 
-// Plik z indeksem: /i<hash nazwy>_<podpis ukladu>.idx (rozmiar ksiazki sprawdza naglowek)
+// Index file: /i<name hash>_<layout signature>.idx (the header checks the book size)
 void idxPath(const char* name, uint32_t sig, char* path, size_t n) {
   snprintf(path, n, "/i%08lx_%08lx.idx", (unsigned long)nameHash(name), (unsigned long)sig);
 }
 
-// Usuwa wszystkie pliki indeksu danej ksiazki (dla kazdego ukladu strony)
+// Removes all index files of a book (for every page layout)
 void removeAllIdx(const char* name) {
   char prefix[16];
   snprintf(prefix, sizeof(prefix), "i%08lx_", (unsigned long)nameHash(name));
@@ -478,22 +478,22 @@ void removeAllIdx(const char* name) {
 }
 
 // ============================================================
-//  Stan aplikacji
+//  Application state
 // ============================================================
 enum Screen { S_MENU, S_LIBRARY, S_READER, S_UPLOAD, S_INFO, S_GOTO, S_SETTINGS, S_STATS, S_PINSCAN, S_SETTIME, S_SETBATT };
 Screen screen = S_MENU;
 bool fsOk = false;
 Preferences prefs;
 
-// ---------- Hotspot: nazwa i haslo ----------
-// Nazwa sieci: InkBlink-XXXX (koncowka z unikalnego adresu plytki)
+// ---------- Hotspot: name and password ----------
+// Network name: InkBlink-XXXX (suffix from the unique board address)
 void apSsid(char* out, size_t n) {
   uint64_t mac = ESP.getEfuseMac();
   snprintf(out, n, "%s%04X", AP_SSID_PREFIX, (unsigned)((mac >> 32) & 0xFFFF));
 }
 
-// Haslo: 8 cyfr, losowane RAZ i zapamietane - telefon zapamieta siec i nastepnym razem
-// polaczy sie sam. Mozna je wymienic w Ustawieniach.
+// Password: 8 digits, drawn ONCE and remembered - the phone remembers the network and connects
+// by itself next time. It can be replaced in Settings.
 String apPasswordNew() {
   char b[10];
   snprintf(b, sizeof(b), "%08lu", (unsigned long)random(100000000L));
@@ -513,12 +513,12 @@ const char* menuLabels[7];
 int menuCount = 0;
 int menuSel = 0;
 
-// ---------- Biblioteka ----------
+// ---------- Library ----------
 char bookNames[MAX_BOOKS][NAME_LEN];
 int bookCount = 0;
 int libSel = 0;
 
-// ---------- Czytnik ----------
+// ---------- Reader ----------
 File book;
 uint32_t bookSize = 0;
 char curBook[NAME_LEN];
@@ -536,43 +536,43 @@ File uploadFile;
 bool uploadOk = false;
 bool uploadDone = false;
 char uploadName[NAME_LEN];
-bool uploadIsToc = false;          // wysylany plik to spis tresci (.toc), a nie ksiazka
+bool uploadIsToc = false;          // the file being uploaded is a table of contents (.toc), not a book
 uint32_t uploadBytes = 0;
 char uploadPath[NAME_LEN + 2];
 char lastUploaded[NAME_LEN];
 String uploadErr;
 
-// ---------- Statystyki czytania ----------
+// ---------- Reading statistics ----------
 BookStats bst;
 TotalStats tst;
-unsigned long statLastTurn = 0;   // moment ostatniego wyswietlenia strony (0 = nie czytamy)
+unsigned long statLastTurn = 0;   // when the last page was shown (0 = not reading)
 int statTurns = 0;
 
-// ---------- Bateria ----------
+// ---------- Battery ----------
 int batMv = -1;
 unsigned long batAt = 0;
 
-// ---------- Szybkie przewracanie ----------
-int fastLeft = 0;                 // ile szybkich odswiezen zostalo do pelnego
+// ---------- Fast page flip ----------
+int fastLeft = 0;                 // fast refreshes left until the next full one
 
-// ---------- Upload: krok ekranu (0 = dolacz do sieci, 1 = otworz strone) ----------
+// ---------- Upload: screen step (0 = join the network, 1 = open the page) ----------
 int uploadStep = 0;
 
-// ---------- Obraz uspienia: wysylanie ----------
+// ---------- Sleep image: upload ----------
 File wpFile;
 bool wpOk = false;
 String wpErr;
 size_t wpBytes = 0;
 
-// ---------- Diagnostyka hotspotu ----------
-volatile bool statusDirty = false;     // cos sie zmienilo: odswiez licznik na ekranie
-int httpHits = 0;                      // ile zadan HTTP dotarlo do czytnika
+// ---------- Hotspot diagnostics ----------
+volatile bool statusDirty = false;     // something changed: refresh the counter on the screen
+int httpHits = 0;                      // how many HTTP requests reached the reader
 unsigned long lastUploadDraw = 0;
-#define DEV_HOLD_MS 10000UL               // tyle trzeba trzymac MENU w menu glownym (tryb Developer)
-unsigned long devHoldMs = 0;              // != 0: MENU trzymane od tej chwili (menu glowne)
+#define DEV_HOLD_MS 10000UL               // how long MENU must be held in the main menu (developer mode)
+unsigned long devHoldMs = 0;              // != 0: MENU held since this moment (main menu)
 
 // ============================================================
-//  Ekrany pomocnicze
+//  Helper screens
 // ============================================================
 void showMessage(const char* a, const char* b = nullptr, const char* c = nullptr) {
   gfxClear();
@@ -582,10 +582,10 @@ void showMessage(const char* a, const char* b = nullptr, const char* c = nullptr
   gfxPresent();
 }
 
-// Legenda klawiszy przy prawej krawedzi, na wysokosci fizycznych klawiszy:
-//   top = klawisz HOME (MENU), mid = klik pokretla (OK), bot = klawisz EXIT.
-// Pusty napis = klawisz nic tu nie robi (albo robi to samo co inny, wiec nie podpisujemy).
-// arrows = trojkaty nad i pod srodkowa etykieta (pokretlo przewija gora/dol).
+// Key legend at the right edge, level with the physical keys:
+//   top = HOME key (MENU), mid = wheel click (OK), bot = EXIT key.
+// Empty text = the key does nothing here (or the same as another key, so it gets no label).
+// arrows = triangles above and below the middle label (the wheel scrolls up/down).
 void drawLegend(const char* top, const char* mid, const char* bot, bool arrows) {
   int midTop = (SCREEN_H - TAG_H) / 2;
   if (top && top[0]) gfxTag(0, top);
@@ -598,15 +598,15 @@ void drawLegend(const char* top, const char* mid, const char* bot, bool arrows) 
   }
 }
 
-// Czy menu i naglowki rysujemy czcionka U8g2 (ustawienie "Menu font"; bez U8g2 zawsze Classic)
+// Are menus and titles drawn with a U8g2 font ("Menu font" setting; without U8g2 always Classic)
 #if USE_U8G2
 inline bool uiHelvOn() { return cfg.uiFont >= 1 && cfg.uiFont <= 3; }
 #else
 inline bool uiHelvOn() { return false; }
 #endif
 
-// Naglowek ekranu: pogrubiony w Helvetice; w Unifont i Classic zwykly (pogrubianie gestych czcionek
-// zlewalo "M" i "W" w czarny klocek).
+// Screen title: bold in Helvetica; plain in Classic (emboldening dense fonts
+// merged "M" and "W" into a black block).
 void drawTitle(int x, const char* t) {
 #if USE_U8G2
   if (uiHelvOn()) {
@@ -617,7 +617,7 @@ void drawTitle(int x, const char* t) {
   gfxText(x, 0, t, FONT_SIZE);
 }
 
-// Rysuje liste do bufora (bez wysylania na ekran)
+// Draws a list into the buffer (without sending it to the screen)
 void drawListBody(const char* title, ItemFn item, int count, int sel,
                   const char* top, const char* mid, const char* bot) {
   gfxClear();
@@ -629,12 +629,12 @@ void drawListBody(const char* title, ItemFn item, int count, int sel,
   for (int r = 0; r < LIST_ROWS && top0 + r < count; r++) {
 #if USE_U8G2
     if (uiHelvOn()) {
-      if (top0 + r == sel) gfxText(UI_X, 16 + r * 16, ">", FONT_SIZE);          // kursor
+      if (top0 + r == sel) gfxText(UI_X, 16 + r * 16, ">", FONT_SIZE);          // cursor
       char txt[UI_CHARS + 1];
       snprintf(txt, sizeof(txt), "%s", item(top0 + r));
-      int maxW = SCREEN_W - TAG_COL_W - (UI_X + 16) - 2;                         // przed kolumna legendy
+      int maxW = SCREEN_W - TAG_COL_W - (UI_X + 16) - 2;                         // before the key legend column
       int n = (int)strlen(txt);
-      while (n > 0 && uiWidth(cfg.uiFont, txt, false) > maxW) {                          // zabezpieczenie: nie wchodz pod legende
+      while (n > 0 && uiWidth(cfg.uiFont, txt, false) > maxW) {                          // safety: never run under the key legend
         txt[--n] = '\0';
         while (n > 0 && ((uint8_t)txt[n] & 0xC0) == 0x80) txt[--n] = '\0';
       }
@@ -650,8 +650,8 @@ void drawListBody(const char* title, ItemFn item, int count, int sel,
   drawLegend(top, mid, bot, true);
 }
 
-// Odswiezenie ekranow z lista. Przy zmianie samego zaznaczenia (listMoveOnly) robimy szybkie,
-// czesciowe odswiezenie bez migania; wejscie na ekran i co MENU_FULL_EVERY ruchow - pelne.
+// Refreshing list screens. When only the selection changes (listMoveOnly) we do a fast
+// partial refresh without flashing; entering a screen and every MENU_FULL_EVERY moves - full.
 #define MENU_FULL_EVERY 10
 bool listMoveOnly = false;
 int menuFastLeft = 0;
@@ -674,9 +674,9 @@ void drawList(const char* title, ItemFn item, int count, int sel,
 }
 
 // ============================================================
-//  Czas: formatowanie
+//  Time: formatting
 // ============================================================
-// "1h20m", "35m" albo "<1m"
+// "1h20m", "35m" or "<1m"
 void fmtDuration(uint32_t s, char* out, size_t n) {
   uint32_t m = s / 60, h = m / 60;
   m %= 60;
@@ -685,7 +685,7 @@ void fmtDuration(uint32_t s, char* out, size_t n) {
   else snprintf(out, n, "<1m");
 }
 
-// "12h 34m" / "34m" / "0m" (do ekranu statystyk)
+// "12h 34m" / "34m" / "0m" (for the statistics screen)
 void fmtDurationLong(uint32_t s, char* out, size_t n) {
   uint32_t m = s / 60, h = m / 60;
   m %= 60;
@@ -694,9 +694,9 @@ void fmtDurationLong(uint32_t s, char* out, size_t n) {
 }
 
 // ============================================================
-//  Oszczedzanie energii (ustawienie "Power saving")
-//   0 = procesor 240 MHz, 1 = 80 MHz (hotspot 160 MHz, indeksowanie ksiazki 240 MHz),
-//   2 = jak 1 + lekkie uspienie w bezczynnosci (wybudzenie przyciskiem), tylko poza hotspotem.
+//  Power saving ("Power saving" setting)
+//   0 = processor at 240 MHz, 1 = 80 MHz (hotspot 160 MHz, book indexing 240 MHz),
+//   2 = like 1 + light sleep when idle (woken by a button), only outside the hotspot.
 // ============================================================
 static int cpuMhzCur = 240;
 static void cpuSet(int mhz) {
@@ -710,8 +710,8 @@ void powerApply() {
   if (cfg.powerSave > 0) want = (screen == S_UPLOAD) ? 160 : 80;
   cpuSet(want);
 }
-// Lekkie uspienie w menu dopiero po chwili bez przyciskow (przewijanie bez opoznien wybudzania).
-// W ksiazce od razu: tam lagu nie bylo, a 1,5 s na 80 MHz po kazdej stronie podwajalo jej koszt.
+// Light sleep in menus only after a short pause without buttons (scrolling without wake-up lag).
+// In a book at once: there was no lag there, and 1.5 s at 80 MHz after every page doubled its cost.
 #define PS_LIGHT_GRACE_MS 1500
 extern unsigned long lastActivityMs;
 static void idleWait() {
@@ -722,7 +722,7 @@ static void idleWait() {
 }
 
 // ============================================================
-//  Szacowanie baterii (patrz battery_model.h)
+//  Battery estimate (see battery_model.h)
 // ============================================================
 BatModel bm;
 static uint32_t bmLastMs = 0, bmLastSave = 0, bmPrevFull = 0, bmPrevFast = 0;
@@ -735,13 +735,13 @@ static const char* batTilde() {
 }
 
 // ============================================================
-//  Bateria
+//  Battery
 // ============================================================
 bool batteryAvailable() {
   return PIN_BAT_ADC >= 0 || batteryIsEstimate();
 }
 
-// Przyblizony poziom naladowania ogniwa Li-Po z napiecia (mV)
+// Approximate state of charge of a Li-Po cell from its voltage (mV)
 int batteryPercentFromMv(int mv) {
   static const int16_t T[10][2] = {
     { 4200, 100 }, { 4100, 90 }, { 4000, 78 }, { 3900, 62 }, { 3800, 45 },
@@ -757,10 +757,10 @@ int batteryPercentFromMv(int mv) {
   return 0;
 }
 
-// Napiecie baterii w mV z pamieci podrecznej (odswiezane co 30 s); -1 = brak pomiaru
+// Battery voltage in mV from the cache (refreshed every 30 s); -1 = no measurement
 int batteryMv() {
-  if (PIN_BAT_ADC < 0) return -1;             // bez czujnika nie ma napiecia, tylko szacunek procentowy
-  if (screen == S_UPLOAD) return batMv;       // przy WiFi ADC2 nie dziala - uzywamy ostatniego odczytu
+  if (PIN_BAT_ADC < 0) return -1;             // without a sensor there is no voltage, only the estimated percentage
+  if (screen == S_UPLOAD) return batMv;       // ADC2 does not work with WiFi on - use the last reading
   if (batMv < 0 || millis() - batAt > 30000UL) {
     batMv = boardBatteryMv();
     batAt = millis();
@@ -774,7 +774,7 @@ int batteryPercent() {
   return mv < 0 ? -1 : batteryPercentFromMv(mv);
 }
 
-// ---- zapis, aktualizacja i log modelu ----
+// ---- saving, updating and logging the model ----
 void bmSave() {
   prefs.putBool("bm_ok", bm.valid);
   prefs.putFloat("bm_rem", bm.remMah);
@@ -798,13 +798,13 @@ void bmLoad() {
   bmPrevFull = g_presFull;
   bmPrevFast = g_presFast;
 }
-// Zmiana pojemnosci w ustawieniach: zachowaj procent
+// Capacity changed in the settings: keep the percentage
 void bmCapSync() {
   float pct = bmPercent(bm);
   bm.capMah = BM_CAPS[cfg.battCap % 6];
   if (bm.valid) bm.remMah = bm.capMah * pct / 100.0f;
 }
-// Wolane w kazdej iteracji petli: dolicza czas pracy i odswiezenia ekranu od poprzedniego razu
+// Called on every loop pass: adds the awake time and screen refreshes since the previous call
 void bmUpdate() {
   uint32_t now = millis();
   uint32_t dt = now - bmLastMs;
@@ -820,7 +820,7 @@ void bmUpdate() {
     bmSave();
   }
 }
-// Po wybudzeniu z gleboki snu: dolicz czas snu (wymaga ustawionego zegara przed snem i po nim)
+// After waking from deep sleep: add the sleep time (needs the clock set before and after sleeping)
 void bmBootSleepAccount() {
   uint32_t t0 = prefs.getUInt("bm_slp", 0);
   if (t0 && esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED && clockValid() && bm.valid) {
@@ -829,13 +829,13 @@ void bmBootSleepAccount() {
   }
   prefs.putUInt("bm_slp", 0);
 }
-// Dopisuje wiersz do /battlog.csv (liczniki od poprzedniego ustawienia + stan szacunku przed i po)
+// Appends a row to /battlog.csv (counters since the previous setting + the estimate before and after)
 static void bmLog(const char* note, float volt, float pctBefore, float pctAfter) {
   if (!fsOk) return;
   File r = LittleFS.open("/battlog.csv", "r");
   size_t sz = r ? r.size() : 0;
   if (r) r.close();
-  if (sz > 12000) {                          // log nie rosnie bez konca
+  if (sz > 12000) {                          // the log does not grow forever
     LittleFS.remove("/battlog.csv");
     sz = 0;
   }
@@ -873,9 +873,9 @@ void bmClear() {
   bmSave();
 }
 
-// Prawy gorny rog: zegar (jesli wlaczony) i bateria ("87%" + ikona)
+// Top right corner: clock (if on) and battery ("87%" + icon)
 void drawBatteryCorner() {
-  int right = SCREEN_W - 4;                      // prawa krawedz zegara
+  int right = SCREEN_W - 4;                      // right edge of the clock
   int pct = batteryPercent();
   if (pct >= 0) {
     char t[10];
@@ -887,16 +887,16 @@ void drawBatteryCorner() {
   }
   if (cfg.clockMode > 0) {
     char c[12];
-    if (!clockFormat(c, sizeof(c), cfg.clockMode)) snprintf(c, sizeof(c), "--:--");   // czas jeszcze nie ustawiony
+    if (!clockFormat(c, sizeof(c), cfg.clockMode)) snprintf(c, sizeof(c), "--:--");   // time not set yet
     gfxText(right - gfxTextWidth(c, FOOT_SIZE), 1, c, FOOT_SIZE);
   }
 }
 
 // ============================================================
-//  Statystyki czytania
+//  Reading statistics
 // ============================================================
-int readPercent();                     // (zdefiniowana w sekcji Czytnik)
-bool getLastBook(char* out, size_t n); // (zdefiniowana w sekcji Menu)
+int readPercent();                     // (defined in the Reader section)
+bool getLastBook(char* out, size_t n); // (defined in the Menu section)
 
 void statKey(const char* name, uint32_t size, char* key) {
   uint32_t h = nameHash(name) ^ (size * 2246822519UL);
@@ -933,12 +933,12 @@ void statsSave() {
   statTurns = 0;
 }
 
-// Wolac po wyswietleniu strony w czytniku (zaczyna liczyc czas)
+// Call after a page is shown in the reader (starts counting time)
 void statsTouch() {
   statLastTurn = millis();
 }
 
-// Wolac przy zmianie strony (po ustawieniu nowej wartosci page)
+// Call when the page changes (after setting the new page value)
 void statsOnTurn(int fromPage, int toPage) {
   unsigned long now = millis();
   if (statLastTurn) {
@@ -947,7 +947,7 @@ void statsOnTurn(int fromPage, int toPage) {
       bst.secs += dt;
       tst.secs += dt;
     }
-    // tempo liczymy tylko ze zwyklego przewrocenia o jedna strone
+    // speed is only measured from ordinary one-page turns
     if (toPage == fromPage + 1 && dt >= STATS_MIN_TURN_S && dt <= STATS_MAX_GAP_S) {
       uint32_t bytes = pageOff[toPage] - pageOff[fromPage];
       bst.spdBytes += bytes;
@@ -966,7 +966,7 @@ void statsOnTurn(int fromPage, int toPage) {
   if (++statTurns >= STATS_SAVE_EVERY) statsSave();
 }
 
-// Konczy sesje czytania (wyjscie z czytnika, uspienie): dolicza ostatnia strone i zapisuje
+// Ends a reading session (leaving the reader, sleep): adds the last page and saves
 void statsFlush() {
   if (!statLastTurn || curBook[0] == '\0') return;
   uint32_t dt = (uint32_t)((millis() - statLastTurn) / 1000UL);
@@ -978,7 +978,7 @@ void statsFlush() {
   statsSave();
 }
 
-// Przewidywany czas do konca (s) z tempa tej ksiazki, a gdy go jeszcze brak - ze sredniego tempa; -1 = nie wiadomo
+// Estimated time to the end (s) from this book's speed, or the average speed when that is missing; -1 = unknown
 long statsLeftSecondsFor(const BookStats& b, uint32_t bytesLeft) {
   double rate = 0;
   if (b.spdSecs >= 30 && b.spdBytes >= 800) rate = (double)b.spdBytes / b.spdSecs;
@@ -995,7 +995,7 @@ long statsLeftSeconds() {
   return statsLeftSecondsFor(bst, bookSize > off ? bookSize - off : 0);
 }
 
-// Ostatnia ksiazka (nazwa, rozmiar, pozycja zakladki) bez otwierania jej do czytania
+// Last book (name, size, bookmark position) without opening it for reading
 bool lastBookInfo(char* name, uint32_t& size, uint32_t& off) {
   if (!getLastBook(name, NAME_LEN)) return false;
   char path[NAME_LEN + 2];
@@ -1011,9 +1011,9 @@ bool lastBookInfo(char* name, uint32_t& size, uint32_t& off) {
 }
 
 // ============================================================
-//  Ekran uspienia: karta ksiazki albo obraz
+//  Sleep screen: book card or image
 // ============================================================
-// Obraz wgrany przez przegladarke (/wallpaper.bin): 250x122, 1 bit, 1 = tusz
+// Image uploaded through the browser (/wallpaper.bin): 250x122, 1 bit, 1 = ink
 bool drawWallpaperFile() {
   File f = LittleFS.open(WALLPAPER_PATH, "r");
   if (!f) return false;
@@ -1031,11 +1031,11 @@ bool drawWallpaperFile() {
   return true;
 }
 
-// Wbudowany obraz: ksiezyc, gwiazdki i "Zzz"
+// Built-in image: moon, stars and "Zzz"
 void drawDefaultWallpaper() {
-  uiDisc(196, 44, 26, true);                  // sierp ksiezyca = tarcza minus przesunieta tarcza
+  uiDisc(196, 44, 26, true);                  // crescent moon = disc minus a shifted disc
   uiDisc(208, 36, 23, false);
-  static const int8_t stars[8][3] = {         // x, y, wielkosc
+  static const int8_t stars[8][3] = {         // x, y, size
     { 30, 18, 2 }, { 74, 36, 1 }, { 120, 14, 2 }, { 150, 52, 1 },
     { 236, 22, 1 }, { 148, 28, 1 }, { 96, 70, 1 }, { 232, 90, 2 }
   };
@@ -1052,7 +1052,7 @@ void drawDefaultWallpaper() {
   gfxText(6, 108, "OK = wake up", FOOT_SIZE);
 }
 
-// Tytul z nazwy pliku: bez .txt, '_' -> spacja, zawiniety do dwoch wierszy
+// Title from the file name: without .txt, '_' -> space, wrapped to two lines
 void titleLines(const char* fileName, char* l1, char* l2, int maxChars) {
   char t[NAME_LEN];
   shortName(fileName, t, NAME_LEN - 1);
@@ -1080,7 +1080,7 @@ void titleLines(const char* fileName, char* l1, char* l2, int maxChars) {
   }
 }
 
-// Karta biezacej (albo ostatniej) ksiazki. false = nie ma zadnej ksiazki.
+// Card of the current (or last) book. false = there is no book at all.
 bool drawSleepBookCard() {
   char name[NAME_LEN];
   uint32_t size = 0, off = 0;
@@ -1112,7 +1112,7 @@ bool drawSleepBookCard() {
   gfxText(6, 22, l1, FONT_SIZE);
   if (l2[0]) gfxText(6, 40, l2, FONT_SIZE);
 
-  uiRect(6, 64, 243, 73);                         // pasek postepu
+  uiRect(6, 64, 243, 73);                         // progress bar
   int fill = pct * 236 / 100;
   if (fill > 0) uiFillRect(7, 65, 6 + fill, 72);
 
@@ -1147,7 +1147,7 @@ void drawSleepScreen() {
 }
 
 // ============================================================
-//  Biblioteka
+//  Library
 // ============================================================
 void scanBooks() {
   bookCount = 0;
@@ -1170,7 +1170,7 @@ void scanBooks() {
   if (f) f.close();
   root.close();
 
-  // sortowanie alfabetyczne
+  // alphabetical sorting
   for (int i = 1; i < bookCount; i++) {
     char tmp[NAME_LEN];
     strcpy(tmp, bookNames[i]);
@@ -1215,7 +1215,7 @@ void goLibrary() {
 }
 
 // ============================================================
-//  Czytnik
+//  Reader
 // ============================================================
 void saveBookmark() {
   bmDirty = false;
@@ -1226,19 +1226,19 @@ void saveBookmark() {
   prefs.putString("last", curBook);
 }
 
-// ---------- Spis tresci (rozdzialy) ----------
-uint32_t chOff[MAX_CH];            // offsety poczatkow rozdzialow (bajty w pliku ksiazki)
+// ---------- Table of contents (chapters) ----------
+uint32_t chOff[MAX_CH];            // offsets of chapter starts (bytes in the book file)
 char chTitle[MAX_CH][32];
 int chCount = 0;
 
-// obcina napis do maxBytes bajtow, nie rozcinajac znaku UTF-8
+// cuts a string to maxBytes bytes without splitting a UTF-8 character
 void utf8Trunc(char* s, int maxBytes) {
   if ((int)strlen(s) <= maxBytes) return;
   int n = maxBytes;
   while (n > 0 && ((uint8_t)s[n] & 0xC0) == 0x80) n--;
   s[n] = '\0';
 }
-// obcina napis do maxChars znakow
+// cuts a string to maxChars characters
 void utf8CutChars(char* s, int maxChars) {
   int i = 0, ch = 0;
   while (s[i]) {
@@ -1248,7 +1248,7 @@ void utf8CutChars(char* s, int maxChars) {
   }
 }
 
-// Dodaje jeden wiersz "offset<TAB>tytul" do spisu (bledne i nierosnace pomija)
+// Adds one "offset<TAB>title" line to the table of contents (skips invalid and non-increasing ones)
 static void tocAddLine(char* line, uint32_t bookBytes) {
   char* tab = strchr(line, '\t');
   if (!tab || chCount >= MAX_CH) return;
@@ -1288,18 +1288,18 @@ void loadToc(const char* bookName, uint32_t bookBytes) {
         skipRest = false;
       } else if (c != '\r' && !skipRest) {
         if (ll < (int)sizeof(line) - 1) line[ll++] = c;
-        else skipRest = true;                // zbyt dlugi wiersz: reszte ignorujemy
+        else skipRest = true;                // line too long: ignore the rest
       }
     }
   }
-  if (ll > 0) {                              // ostatni wiersz bez konca linii
+  if (ll > 0) {                              // last line without a line ending
     line[ll] = '\0';
     tocAddLine(line, bookBytes);
   }
   f.close();
 }
 
-// rozdzial, w ktorym lezy dany offset w pliku (0 gdy przed pierwszym)
+// chapter that contains a given file offset (0 when before the first one)
 int chapterOfOffset(uint32_t off) {
   int r = 0;
   for (int i = 0; i < chCount; i++) {
@@ -1309,20 +1309,20 @@ int chapterOfOffset(uint32_t off) {
   return r;
 }
 
-int findPage(uint32_t off);   // (zdefiniowana ponizej, w sekcji ksiazki)
+int findPage(uint32_t off);   // (defined below, in the book section)
 
-// Rozdzial strony (numer od 0): ten, ktory zaczyna sie na tej stronie albo wczesniej - liczony po
-// KONCU strony, wiec strona z poczatkiem rozdzialu w polowie nalezy juz do nowego rozdzialu.
+// Chapter of a page (numbered from 0): the one that starts on this page or earlier - counted from
+// the END of the page, so a page with a chapter start in the middle already belongs to the new chapter.
 int chapterOfPage(int p) {
   uint32_t endOff = (p + 1 < totalPages) ? pageOff[p + 1] - 1 : bookSize;
   return chapterOfOffset(endOff);
 }
-int chapterStartPage(int ci) {       // numer strony (od 1), na ktorej zaczyna sie rozdzial
+int chapterStartPage(int ci) {       // page number (from 1) where the chapter starts
   return findPage(chOff[ci]) + 1;
 }
 
 void closeBook() {
-  statsFlush();                       // dolicz czas czytania i zapisz statystyki
+  statsFlush();                       // add the reading time and save the statistics
   if (book) book.close();
   if (pageOff) {
     free(pageOff);
@@ -1333,7 +1333,7 @@ void closeBook() {
   chCount = 0;
 }
 
-// Alokuje tablice offsetow (PSRAM, jesli jest; inaczej zwykla sterta).
+// Allocates the offset table (PSRAM if present; otherwise the normal heap).
 bool allocIndex(int want) {
   if (pageOff) {
     free(pageOff);
@@ -1353,11 +1353,11 @@ bool allocIndex(int want) {
   return false;
 }
 
-// Przeglada plik raz i zapisuje, gdzie zaczyna sie kazda strona.
+// Reads the file once and stores where every page starts.
 bool buildIndex(uint32_t startPos) {
   static char chunk[CHUNK_BUF];
 
-  // zwykle strona to >= 100 B; zapas 2,5x
+  // a page is usually >= 100 B; 2.5x headroom
   if (!allocIndex((int)(bookSize / 40) + 8)) return false;
 
   totalPages = 0;
@@ -1375,14 +1375,14 @@ bool buildIndex(uint32_t startPos) {
     int off = 0;
 
     while (totalPages < maxPages && off < n) {
-      // za malo danych w kawalku: doczytaj nastepny (chyba ze koniec pliku)
+      // not enough data in this chunk: read the next one (unless at the end of the file)
       if (!eof && n - off < PAGE_BUF) break;
       pageOff[totalPages++] = pos + off;
       int used = consumePage(chunk + off);
       if (used <= 0) used = 1;
       off += used;
     }
-    if (off <= 0) off = n;   // zabezpieczenie przed petla
+    if (off <= 0) off = n;   // guard against an endless loop
     pos += off;
   }
 
@@ -1423,7 +1423,7 @@ bool loadIndex() {
 
   totalPages = (int)h.count;
   indexTruncated = false;
-  Serial.printf("index z cache: %d stron\n", totalPages);
+  Serial.printf("index from cache: %d pages\n", totalPages);
   return true;
 #else
   return false;
@@ -1446,8 +1446,8 @@ void saveIndex() {
   bool ok = (f.write((uint8_t*)&h, sizeof(h)) == sizeof(h)) &&
             (f.write((uint8_t*)pageOff, (size_t)totalPages * 4) == (size_t)totalPages * 4);
   f.close();
-  if (!ok) LittleFS.remove(p);   // niedokonczony indeks nie moze zostac
-  Serial.println(ok ? "index zapisany" : "index: blad zapisu");
+  if (!ok) LittleFS.remove(p);   // an unfinished index must not stay
+  Serial.println(ok ? "index saved" : "index: write error");
 #endif
 }
 
@@ -1474,7 +1474,7 @@ static bool openBookBody(const char* name) {
   strncpy(curBook, name, NAME_LEN - 1);
   curBook[NAME_LEN - 1] = '\0';
 
-  // pomin BOM UTF-8
+  // skip the UTF-8 BOM
   uint32_t startPos = 0;
   uint8_t bom[3];
   book.seek(0);
@@ -1507,11 +1507,11 @@ static bool openBookBody(const char* name) {
   bmDirty = false;
   statsLoadBook();
   loadToc(curBook, bookSize);
-  Serial.printf("ksiazka: %s, %u B, %d stron\n", curBook, (unsigned)bookSize, totalPages);
+  Serial.printf("book: %s, %u B, %d pages\n", curBook, (unsigned)bookSize, totalPages);
   return true;
 }
 
-// Otwarcie ksiazki (w tym indeksowanie) na pelnej szybkosci procesora, potem wracamy do ustawionej
+// Opening a book (including indexing) at full processor speed, then back to the configured speed
 bool openBook(const char* name) {
   if (cfg.powerSave > 0) cpuSet(240);
   bool ok = openBookBody(name);
@@ -1519,15 +1519,15 @@ bool openBook(const char* name) {
   return ok;
 }
 
-// Procent przeczytania liczony z pozycji w pliku
+// Reading progress in percent from the position in the file
 int readPercent() {
   if (page >= totalPages - 1) return 100;
   if (bookSize == 0) return 0;
   return (int)(((uint64_t)pageOff[page] * 100) / bookSize);
 }
 
-// Pasek stanu: wybrane przez uzytkownika elementy, a pasek postepu
-// wypelnia cale pozostale miejsce w linii.
+// Status line: the items chosen by the user, and the progress bar
+// fills all the remaining space in the line.
 void drawStatus() {
   if (!statusVisible()) return;
 
@@ -1542,12 +1542,12 @@ void drawStatus() {
     long left = statsLeftSeconds();
     char d[16];
     if (left >= 0) fmtDuration((uint32_t)left, d, sizeof(d));
-    else snprintf(d, sizeof(d), "--");     // tempo czytania jeszcze nieznane (potrzeba kilku stron)
+    else snprintf(d, sizeof(d), "--");     // reading speed not known yet (needs a few pages)
     size_t l = strlen(st);
     snprintf(st + l, sizeof(st) - l, "%s~%s", l ? "  " : "", d);
   }
 
-  if (cfg.clockMode > 0 && cfg.clockBook) {          // zegar w ksiazce (tylko gdy czas jest ustawiony)
+  if (cfg.clockMode > 0 && cfg.clockBook) {          // clock in the book (only when the time is set)
     char c[12];
     if (clockFormat(c, sizeof(c), cfg.clockMode)) {
       size_t l = strlen(st);
@@ -1561,7 +1561,7 @@ void drawStatus() {
     tw = gfxTextWidth(st, FOOT_SIZE);
   }
 
-  // bateria przy prawej krawedzi: zawsze albo tylko przy niskim poziomie (Settings)
+  // battery at the right edge: always or only when low (Settings)
   int right = SCREEN_W - MARGIN_X;
   int bp = batteryPercent();
   if (bp >= 0 && (cfg.batMode == 2 || (cfg.batMode == 1 && bp < BAT_LOW_PCT))) {
@@ -1587,8 +1587,8 @@ void drawStatus() {
   }
 }
 
-// fastOk = wolno uzyc szybkiego (czesciowego) odswiezenia, jesli wlaczone w Ustawieniach.
-// Co kilka stron robimy pelne odswiezenie, zeby usunac slady po poprzednich.
+// fastOk = a fast (partial) refresh may be used, if enabled in Settings.
+// Every few pages a full refresh removes traces of the previous pages.
 void showPage(bool fastOk) {
   char buf[PAGE_BUF + 1];
   book.seek(pageOff[page]);
@@ -1604,7 +1604,7 @@ void showPage(bool fastOk) {
     int adv;
     bool hy;
     int len = layoutLine(buf, pos, adv, hy);
-    if (hy && len < 240) {                       // wiersz przerwany w srodku wyrazu: dorysuj myslnik
+    if (hy && len < 240) {                       // line broken in the middle of a word: draw a hyphen
       char tmp[246];
       memcpy(tmp, buf + pos, len);
       tmp[len] = '-';
@@ -1628,7 +1628,7 @@ void showPage(bool fastOk) {
   }
 }
 
-void drawMenu();   // deklaracja (uzywana w goReader)
+void drawMenu();   // declaration (used in goReader)
 
 void goReader(const char* name) {
   if (!openBook(name)) {
@@ -1643,7 +1643,7 @@ void goReader(const char* name) {
   statsTouch();
 }
 
-// Przewraca o 'delta' stron (z ograniczeniem do zakresu); rysuje tylko, gdy cos sie zmienilo
+// Turns 'delta' pages (limited to the valid range); draws only when something changed
 void turnPages(int delta) {
   int np = page + delta;
   if (np < 0) np = 0;
@@ -1657,33 +1657,33 @@ void turnPages(int delta) {
   showPage(true);
 }
 
-// Przyspieszenie przy przytrzymaniu: n = numer powtorzenia (0 = pierwsze wcisniecie)
+// Acceleration while held: n = repeat number (0 = first press)
 int accelStep(int n) {
   static const uint8_t t[6] = { 1, 1, 3, 10, 25, 50 };
   return t[n < 5 ? n : 5];
 }
 
-// Skrot (dlugie OK w czytniku): nastepny rozmiar czcionki, czytasz dalej w tym samym miejscu
+// Shortcut (long OK in the reader): next font size, reading continues at the same place
 void cycleFontSize() {
   int cnt = fontSizeCount(cfg.famIdx);
   if (cnt < 2) return;
   char name[NAME_LEN];
   strcpy(name, curBook);
-  saveBookmark();                              // pozycja zapisana jako offset w bajtach
+  saveBookmark();                              // position saved as a byte offset
   cfg.fontIdx = (cfg.fontIdx + 1) % cnt;
   prefs.putUChar("cfg_fs", cfg.fontIdx);
-  goReader(name);                              // przepaginuje i wroci na ten sam fragment
+  goReader(name);                              // repaginates and returns to the same passage
 }
 
 // ============================================================
-//  Skok do strony (OK w czytniku)
+//  Go to page (OK in the reader)
 // ============================================================
 static const int gotoSteps[4] = { 1, 10, 100, 1000 };
-#define GOTO_CHAPTER 4             // piaty "krok": skok co rozdzial (tylko gdy ksiazka ma spis tresci)
+#define GOTO_CHAPTER 4             // fifth "step": jump by chapter (only when the book has a table of contents)
 int gotoVal = 1;
 int gotoStepIdx = 0;
 
-// Czy dany krok ma sens dla biezacej ksiazki
+// Does a step make sense for the current book
 bool gotoStepUsable(int idx) {
   if (idx == 0) return true;
   if (idx == GOTO_CHAPTER) return chCount >= 2;
@@ -1703,7 +1703,7 @@ void drawGoto() {
   else snprintf(l, sizeof(l), "Step: %d  (%d%%)", gotoSteps[gotoStepIdx], pct);
   gfxText(UI_X, 70, l, FONT_SIZE);
 
-  if (chCount >= 2 && totalPages > 0) {            // nazwa rozdzialu, w ktorym wyladujemy
+  if (chCount >= 2 && totalPages > 0) {            // name of the chapter we will land in
     int ci = chapterOfPage(gotoVal - 1);
     char t[48];
     snprintf(t, sizeof(t), "%d/%d %s", ci + 1, chCount, chTitle[ci]);
@@ -1722,19 +1722,19 @@ void goGoto() {
   drawGoto();
 }
 
-// Skok do poczatku nastepnego (dir > 0) albo biezacego/poprzedniego (dir < 0) rozdzialu.
-// Rozdzialy zaczynajace sie na tej samej stronie sa pomijane (nie da sie na nie "wejsc").
+// Jump to the start of the next (dir > 0) or current/previous (dir < 0) chapter.
+// Chapters starting on the same page are skipped (they cannot be "entered").
 void gotoChapterStep(int dir) {
   int ci = chapterOfPage(gotoVal - 1);
   if (dir > 0) {
-    for (int k = 1; k <= chCount; k++) {                 // z ostatniego rozdzialu wracamy na pierwszy
+    for (int k = 1; k <= chCount; k++) {                 // from the last chapter back to the first
       int sp = chapterStartPage((ci + k) % chCount);
       if (sp != gotoVal) { gotoVal = sp; return; }
     }
   } else {
     int sp = chapterStartPage(ci);
-    if (gotoVal > sp) { gotoVal = sp; return; }          // w srodku rozdzialu: na jego poczatek
-    for (int k = 1; k <= chCount; k++) {                 // na poczatku: poprzedni rozdzial
+    if (gotoVal > sp) { gotoVal = sp; return; }          // inside a chapter: to its start
+    for (int k = 1; k <= chCount; k++) {                 // at the start: previous chapter
       sp = chapterStartPage((ci + chCount - k) % chCount);
       if (sp != gotoVal) { gotoVal = sp; return; }
     }
@@ -1745,7 +1745,7 @@ void onKeyGoto(const KeyEvent& e) {
   int step = gotoSteps[gotoStepIdx % 4];
   if (e.key == KEY_DOWN && isStep(e)) {
     if (gotoStepIdx == GOTO_CHAPTER) gotoChapterStep(1);
-    else if (gotoVal >= totalPages) gotoVal = 1;          // z ostatniej strony na pierwsza
+    else if (gotoVal >= totalPages) gotoVal = 1;          // from the last page to the first
     else {
       gotoVal += step;
       if (gotoVal > totalPages) gotoVal = totalPages;
@@ -1753,7 +1753,7 @@ void onKeyGoto(const KeyEvent& e) {
     drawGoto();
   } else if (e.key == KEY_UP && isStep(e)) {
     if (gotoStepIdx == GOTO_CHAPTER) gotoChapterStep(-1);
-    else if (gotoVal <= 1) gotoVal = totalPages;          // z pierwszej strony na ostatnia
+    else if (gotoVal <= 1) gotoVal = totalPages;          // from the first page to the last
     else {
       gotoVal -= step;
       if (gotoVal < 1) gotoVal = 1;
@@ -1764,7 +1764,7 @@ void onKeyGoto(const KeyEvent& e) {
       gotoStepIdx = (gotoStepIdx + 1) % 5;
     } while (!gotoStepUsable(gotoStepIdx));
     drawGoto();
-  } else if (e.key == KEY_HOME && isShort(e)) {          // zatwierdz skok
+  } else if (e.key == KEY_HOME && isShort(e)) {          // confirm the jump
     int old = page;
     page = gotoVal - 1;
     statsOnTurn(old, page);
@@ -1772,20 +1772,20 @@ void onKeyGoto(const KeyEvent& e) {
     lastTurnMs = millis();
     screen = S_READER;
     showPage(false);
-  } else if (e.key == KEY_BACK && isShort(e)) {          // anuluj
+  } else if (e.key == KEY_BACK && isShort(e)) {          // cancel
     screen = S_READER;
     showPage(false);
   }
 }
 
 // ============================================================
-//  Ustawienia (zapisywane w pamieci nieulotnej)
+//  Settings (stored in non-volatile memory)
 // ============================================================
-void goMenu();   // deklaracja (uzywana w ustawieniach)
+void goMenu();   // declaration (used in the settings)
 
-int setSel = 0;                  // pozycja na liscie grup albo w grupie
-int setGroup = -1;               // -1 = lista grup, 0.. = wnetrze grupy
-int setTopSel = 0;               // zapamietana grupa po powrocie
+int setSel = 0;                  // position in the group list or inside a group
+int setGroup = -1;               // -1 = group list, 0.. = inside a group
+int setTopSel = 0;               // group remembered when coming back
 
 void loadSettings() {
   cfg.famIdx = prefs.getUChar("cfg_fm", cfg.famIdx);
@@ -1818,8 +1818,8 @@ void loadSettings() {
   if (cfg.fullEvery > 2) cfg.fullEvery = 1;
   if (cfg.sleepScreen > 2) cfg.sleepScreen = 0;
   devMode = prefs.getBool("dev_on", false);
-  // 0.9.11: Hotspot power i Power saving przeniesione do ukrytego menu Developer. Jednorazowo
-  // ustawiamy sprawdzone wartosci, zeby nikt nie zostal z niewidocznym gorszym ustawieniem.
+  // 0.9.11: Hotspot power and Power saving moved to the hidden Developer menu. Once,
+  // we set the tested values so that nobody is left with a worse setting they cannot see.
   if (prefs.getUChar("cfg_ver", 0) < 2) {
     cfg.apPower = 1;                 // Medium
     cfg.powerSave = 2;               // Light
@@ -1827,7 +1827,7 @@ void loadSettings() {
     prefs.putUChar("cfg_ps", cfg.powerSave);
     prefs.putUChar("cfg_ver", 2);
   }
-  applyLayout();                 // poprawia tez nieprawidlowe indeksy czcionki
+  applyLayout();                 // also fixes invalid font indexes
   clockApplyTz(cfg.tz);
 }
 
@@ -1863,20 +1863,20 @@ const char* onOff(bool b) {
   return b ? "ON" : "OFF";
 }
 
-// Ustawienia sa podzielone na grupy (menu dwupoziomowe)
-#define SET_GROUPS 5               // grupy widoczne na liscie Settings
-#define SET_DEV 5                  // ukryta grupa Developer (wejscie z menu glownego w trybie Developer)
+// Settings are split into groups (two-level menu)
+#define SET_GROUPS 5               // groups shown in the Settings list
+#define SET_DEV 5                  // hidden Developer group (opened from the main menu in developer mode)
 static const char* const SET_GROUP_NAMES[SET_GROUPS + 1] = { "Reading", "Status line", "Clock", "Power & system", "Battery", "Developer" };
-static const uint8_t SET_GROUP_ITEMS[SET_GROUPS + 1] = { 6, 7, 3, 8, 5, 3 };
+static const uint8_t SET_GROUP_ITEMS[SET_GROUPS + 1] = { 6, 7, 3, 7, 5, 4 };
 
-// Teksty pozycji maja co najwyzej UI_CHARS - 2 znakow (przed nimi jest "> ")
+// Item texts have at most UI_CHARS - 2 characters (they are preceded by "> ")
 const char* groupItem(int g, int i) {
   static char b[UI_CHARS + 1];
-  static const char* const batNames[3] = { "Off", "Low", "Always" };
+  static const char* const batNames[3] = { "OFF", "Low", "Always" };
   static const char* const sleepNames[3] = { "Book info", "Image", "Current page" };
   static const char* const marginNames[3] = { "Normal", "Narrow", "Wide" };
   static const char* const gapNames[3] = { "Normal", "Relaxed", "Loose" };
-  static const char* const clockNames[3] = { "Off", "24h", "12h" };
+  static const char* const clockNames[3] = { "OFF", "24h", "12h" };
   b[0] = 0;
   if (g == 0) {
     switch (i) {
@@ -1889,14 +1889,14 @@ const char* groupItem(int g, int i) {
     }
   } else if (g == 1) {
     switch (i) {
-      case 0: snprintf(b, sizeof(b), "Status line: %s", onOff(statusAnyOn())); break;   // OFF = wszystko wylaczone = wiecej wierszy
+      case 0: snprintf(b, sizeof(b), "Status line: %s", onOff(statusAnyOn())); break;   // OFF = everything off = more lines of text
       case 1: snprintf(b, sizeof(b), "Percent: %s", onOff(cfg.showPct)); break;
       case 2: snprintf(b, sizeof(b), "Page n/N: %s", onOff(cfg.showPage)); break;
       case 3: snprintf(b, sizeof(b), "Time left: %s", onOff(cfg.showLeft)); break;
       case 4: snprintf(b, sizeof(b), "Progress bar: %s", onOff(cfg.showBar)); break;
       case 5: snprintf(b, sizeof(b), "Clock in book: %s", onOff(cfg.clockBook)); break;
       default:
-        if (!batteryAvailable()) snprintf(b, sizeof(b), "Battery: Off");   // brak pomiaru: wlacz Settings -> Battery -> Estimate
+        if (!batteryAvailable()) snprintf(b, sizeof(b), "Battery: OFF");   // no reading: turn on Settings -> Battery -> Estimate
         else snprintf(b, sizeof(b), "Battery: %s", batNames[cfg.batMode % 3]);
         break;
     }
@@ -1904,7 +1904,7 @@ const char* groupItem(int g, int i) {
     switch (i) {
       case 0: snprintf(b, sizeof(b), "Clock: %s", clockNames[cfg.clockMode % 3]); break;
       case 1: snprintf(b, sizeof(b), "Zone: %s", TZS[cfg.tz % TZ_COUNT].name); break;
-      default: {                                   // OK otwiera reczne ustawianie czasu
+      default: {                                   // OK opens manual time setting
         char t[12];
         if (clockFormat(t, sizeof(t), cfg.clockMode == 2 ? 2 : 1)) snprintf(b, sizeof(b), "Set time: %s", t);
         else snprintf(b, sizeof(b), "Set time: not set");
@@ -1925,8 +1925,7 @@ const char* groupItem(int g, int i) {
         break;
       }
       case 5: snprintf(b, sizeof(b), "Full every: %d pages", fullEveryVals[cfg.fullEvery % 3]); break;
-      case 6: snprintf(b, sizeof(b), "Open last book: %s", onOff(cfg.autoOpen)); break;
-      default: snprintf(b, sizeof(b), "Hotspot: %s", apPassword().c_str()); break;
+      default: snprintf(b, sizeof(b), "Open last book: %s", onOff(cfg.autoOpen)); break;
     }
   } else if (g == SET_DEV) {
     switch (i) {
@@ -1936,10 +1935,11 @@ const char* groupItem(int g, int i) {
         break;
       }
       case 1: {
-        static const char* const psNames[3] = { "Off", "CPU 80", "Light" };
+        static const char* const psNames[3] = { "OFF", "CPU 80", "Light" };
         snprintf(b, sizeof(b), "Power saving: %s", psNames[cfg.powerSave % 3]);
         break;
       }
+      case 2: snprintf(b, sizeof(b), "Hotspot: %s", apPassword().c_str()); break;   // OK draws a new password
       default: snprintf(b, sizeof(b), "Battery pin test"); break;
     }
   } else {
@@ -1965,10 +1965,10 @@ int settingsCount() {
   return setGroup < 0 ? SET_GROUPS : SET_GROUP_ITEMS[setGroup];
 }
 
-void goSetTime();                      // (ponizej, po ustawieniach)
+void goSetTime();                      // (below, after the settings)
 void goSetBatt();
 void goPinScan();
-bool settingsFromReader = false;       // wejscie skrotem z ksiazki (dlugie BACK): BACK wraca do ksiazki
+bool settingsFromReader = false;       // entered through the shortcut from a book (long BACK): BACK returns to the book
 char settingsResumeBook[NAME_LEN];
 
 void drawSettings() {
@@ -2009,13 +2009,13 @@ void groupChange(int g, int i) {
     }
   } else if (g == 1) {
     switch (i) {
-      case 0: statusSetAll(!statusAnyOn()); break;          // ON/OFF zmienia wszystkie podopcje naraz
+      case 0: statusSetAll(!statusAnyOn()); break;          // ON/OFF changes all items at once
       case 1: cfg.showPct = !cfg.showPct; break;
       case 2: cfg.showPage = !cfg.showPage; break;
       case 3: cfg.showLeft = !cfg.showLeft; break;
       case 4: cfg.showBar = !cfg.showBar; break;
       case 5: cfg.clockBook = !cfg.clockBook; break;
-      default: if (batteryAvailable()) cfg.batMode = (cfg.batMode + 1) % 3; break;   // bez pomiaru nie ma czego pokazac
+      default: if (batteryAvailable()) cfg.batMode = (cfg.batMode + 1) % 3; break;   // without a reading there is nothing to show
     }
   } else if (g == 2) {
     switch (i) {
@@ -2024,7 +2024,7 @@ void groupChange(int g, int i) {
         cfg.tz = (cfg.tz + 1) % TZ_COUNT;
         clockApplyTz(cfg.tz);
         break;
-      default: break;                        // informacja: czas ustawia sie ze strony WWW
+      default: break;                        // information: the time is set from the web page
     }
   } else if (g == 3) {
     switch (i) {
@@ -2034,8 +2034,7 @@ void groupChange(int g, int i) {
       case 3: cfg.fastMenu = !cfg.fastMenu; break;
       case 4: cfg.uiFont = (cfg.uiFont == 2) ? 0 : 2; break;      // Helvetica 12 <-> Classic
       case 5: cfg.fullEvery = (cfg.fullEvery + 1) % 3; break;
-      case 6: cfg.autoOpen = !cfg.autoOpen; break;
-      default: apPasswordNew(); break;       // nowe haslo hotspotu
+      default: cfg.autoOpen = !cfg.autoOpen; break;
     }
   } else if (g == SET_DEV) {
     switch (i) {
@@ -2044,7 +2043,8 @@ void groupChange(int g, int i) {
         cfg.powerSave = (cfg.powerSave + 1) % 3;
         powerApply();
         break;
-      default: break;                        // 2: test pinow (otwierany w onKeySettings)
+      case 2: apPasswordNew(); break;        // new hotspot password (phones must join the network again)
+      default: break;                        // 3: pin test (opened in onKeySettings)
     }
   } else {
     switch (i) {
@@ -2055,7 +2055,7 @@ void groupChange(int g, int i) {
         break;
       case 3: bmMarkFull(); break;
       case 4: bmClear(); break;
-      default: break;                        // 2: edytor napiecia (otwierany w onKeySettings)
+      default: break;                        // 2: voltage editor (opened in onKeySettings)
     }
   }
 }
@@ -2071,41 +2071,41 @@ void onKeySettings(const KeyEvent& e) {
     listMoveOnly = true;
     drawSettings();
   } else if (e.key == KEY_OK && isShort(e)) {
-    if (setGroup < 0) {                      // wejscie do grupy
+    if (setGroup < 0) {                      // enter a group
       setTopSel = setSel;
       setGroup = setSel;
       setSel = 0;
     } else if (setGroup == 2 && setSel == 2) {
-      goSetTime();                           // reczne ustawianie daty i godziny
+      goSetTime();                           // manual date and time setting
       return;
     } else if (setGroup == 4 && setSel == 2) {
-      goSetBatt();                           // reczne wpisanie napiecia baterii
+      goSetBatt();                           // manual battery voltage entry
       return;
-    } else if (setGroup == SET_DEV && setSel == 2) {
-      goPinScan();                           // szukanie pinu baterii (po przerobce plytki)
+    } else if (setGroup == SET_DEV && setSel == 3) {
+      goPinScan();                           // battery pin search (after a board modification)
       return;
     } else {
       groupChange(setGroup, setSel);
       applyLayout();
-      listMoveOnly = true;                   // zmiana wartosci: szybkie odswiezenie
+      listMoveOnly = true;                   // value changed: fast refresh
     }
     drawSettings();
   } else if (e.key == KEY_HOME && isShort(e) && settingsFromReader && setGroup >= 0 && setGroup <= 1) {
-    setGroup = 1 - setGroup;                 // skrot z ksiazki: HOME przelacza tekst <-> pasek stanu
+    setGroup = 1 - setGroup;                 // shortcut from a book: HOME switches text <-> status line
     setSel = 0;
     drawSettings();
   } else if (e.key == KEY_BACK && isShort(e)) {
     saveSettings();
-    if (settingsFromReader) {                // skrot z ksiazki: wracamy do niej (z nowym ukladem)
+    if (settingsFromReader) {                // shortcut from a book: back to it (with the new layout)
       settingsFromReader = false;
       setGroup = -1;
       goReader(settingsResumeBook);
       return;
     }
-    if (setGroup == SET_DEV) {               // Developer otwierany z menu glownego: tam wracamy
+    if (setGroup == SET_DEV) {               // Developer is opened from the main menu: return there
       setGroup = -1;
       goMenu();
-    } else if (setGroup >= 0) {              // z grupy wracamy na liste grup
+    } else if (setGroup >= 0) {              // from a group back to the group list
       setGroup = -1;
       setSel = setTopSel;
       drawSettings();
@@ -2115,9 +2115,9 @@ void onKeySettings(const KeyEvent& e) {
   }
 }
 
-// ---------- Reczne ustawienie zegara ----------
-// Pola: 0 rok, 1 miesiac, 2 dzien, 3 godzina, 4 minuta (czas lokalny wybranej strefy).
-// DOWN zwieksza, UP zmniejsza (jak w "Go to page"); OK = nastepne pole; HOME = zapisz; BACK = anuluj.
+// ---------- Manual clock setting ----------
+// Fields: 0 year, 1 month, 2 day, 3 hour, 4 minute (local time of the chosen time zone).
+// DOWN increases, UP decreases (as in "Go to page"); OK = next field; HOME = save; BACK = cancel.
 int stY = 2026, stMo = 1, stD = 1, stH = 12, stMi = 0, stField = 0;
 
 static int wrapRange(int v, int lo, int hi) {
@@ -2125,7 +2125,7 @@ static int wrapRange(int v, int lo, int hi) {
   return lo + (((v - lo) % n) + n) % n;
 }
 
-// Wartosci poczatkowe: biezacy czas; gdy zegar nie jest ustawiony - ostatni znany (zapisany) albo data kompilacji
+// Initial values: the current time; when the clock is not set - the last known (saved) time or the build date
 static void stLoadDefaults() {
   time_t t = 0;
   if (clockValid()) t = clockNow();
@@ -2143,7 +2143,7 @@ static void stLoadDefaults() {
     stMi = tmv.tm_min;
   } else {
     static const char* const MONTHS = "JanFebMarAprMayJunJulAugSepOctNovDec";
-    const char* d = __DATE__;                // np. "Oct 14 2026"
+    const char* d = __DATE__;                // e.g. "Oct 14 2026"
     stMo = 1;
     for (int i = 0; i < 12; i++) if (strncmp(d, MONTHS + 3 * i, 3) == 0) stMo = i + 1;
     stD = atoi(d + 4);
@@ -2166,10 +2166,10 @@ void drawSetTime() {
   gfxText(UI_X, 26, l, 24);
   snprintf(l, sizeof(l), "%02d:%02d", stH, stMi);
   gfxText(UI_X, 62, l, 24);
-  static const int fx[5] = { 0, 60, 96, 0, 36 };       // poczatek pola w px (12 px na znak)
+  static const int fx[5] = { 0, 60, 96, 0, 36 };       // start of each field in px (12 px per character)
   static const int fw[5] = { 48, 24, 24, 24, 24 };
   int under = (stField < 3 ? 26 : 62) + 26;
-  gfxHLine(UI_X + fx[stField], UI_X + fx[stField] + fw[stField] - 1, under);        // podkreslenie aktywnego pola
+  gfxHLine(UI_X + fx[stField], UI_X + fx[stField] + fw[stField] - 1, under);        // underline of the active field
   gfxHLine(UI_X + fx[stField], UI_X + fx[stField] + fw[stField] - 1, under + 1);
   char z[28];
   snprintf(z, sizeof(z), "Zone: %s", TZS[cfg.tz % TZ_COUNT].name);
@@ -2180,7 +2180,7 @@ void drawSetTime() {
 
 void goSetTime() {
   stLoadDefaults();
-  stField = 3;                               // najczesciej poprawia sie godzine
+  stField = 3;                               // the hour is the field corrected most often
   screen = S_SETTIME;
   drawSetTime();
 }
@@ -2195,7 +2195,7 @@ static void stLeave() {
 void onKeySetTime(const KeyEvent& e) {
   if ((e.key == KEY_UP || e.key == KEY_DOWN) && isStep(e)) {
     int dir = (e.key == KEY_DOWN) ? 1 : -1;
-    int step = (stField == 4) ? accelStep(e.repeat) : 1;   // minuty: przy przytrzymaniu szybciej
+    int step = (stField == 4) ? accelStep(e.repeat) : 1;   // minutes: faster while held
     if (step > 10) step = 10;
     switch (stField) {
       case 0: stY = wrapRange(stY + dir * step, 2024, 2099); break;
@@ -2204,26 +2204,26 @@ void onKeySetTime(const KeyEvent& e) {
       case 3: stH = wrapRange(stH + dir * step, 0, 23); break;
       default: stMi = wrapRange(stMi + dir * step, 0, 59); break;
     }
-    int dm = clockDaysInMonth(stY, stMo);                 // zmiana roku/miesiaca nie moze zostawic nieistniejacego dnia
+    int dm = clockDaysInMonth(stY, stMo);                 // changing the year/month must not leave a day that does not exist
     if (stD > dm) stD = dm;
     drawSetTime();
   } else if (e.key == KEY_OK && isShort(e)) {
     stField = (stField + 1) % 5;
     drawSetTime();
-  } else if (e.key == KEY_HOME && isShort(e)) {          // zapisz
+  } else if (e.key == KEY_HOME && isShort(e)) {          // save
     clockApplyTz(cfg.tz);
     if (clockSetLocal(stY, stMo, stD, stH, stMi)) prefs.putUInt("clk_last", (uint32_t)clockNow());
     stLeave();
-  } else if (e.key == KEY_BACK && isShort(e)) {          // anuluj
+  } else if (e.key == KEY_BACK && isShort(e)) {          // cancel
     stLeave();
   }
 }
 
-// ---------- Reczne wpisanie napiecia baterii ----------
-// Napiecie zmierzone multimetrem NA SPOCZYNKU (bateria bez obciazenia, po kilkudziesieciu minutach od
-// ladowania/pracy) ustawia punkt startowy szacunku wg krzywej Li-Po. DOWN zwieksza, UP zmniejsza,
-// OK = krok 0,01 / 0,05 V, HOME = zapisz, BACK = anuluj.
-int sbCv = 390;                  // centywolty
+// ---------- Manual battery voltage entry ----------
+// Voltage measured with a multimeter AT REST (battery without load, a few tens of minutes after
+// charging/use) sets the starting point of the estimate from the Li-Po curve. DOWN increases, UP decreases,
+// OK = step 0.01 / 0.05 V, HOME = save, BACK = cancel.
+int sbCv = 390;                  // centivolts
 int sbStep = 1;
 
 void drawSetBatt() {
@@ -2263,7 +2263,7 @@ static void sbLeave() {
 void onKeySetBatt(const KeyEvent& e) {
   if ((e.key == KEY_UP || e.key == KEY_DOWN) && isStep(e)) {
     int dir = (e.key == KEY_DOWN) ? 1 : -1;
-    sbCv += dir * sbStep * (e.repeat > 8 ? 2 : 1);          // przytrzymanie: szybciej
+    sbCv += dir * sbStep * (e.repeat > 8 ? 2 : 1);          // held: faster
     if (sbCv < 300) sbCv = 300;
     if (sbCv > 425) sbCv = 425;
     drawSetBatt();
@@ -2297,7 +2297,7 @@ const char* menuItem(int i) {
 
 void drawMenu() {
   char last[NAME_LEN];
-  bool canRead = getLastBook(last, sizeof(last));      // BACK = wroc do ksiazki
+  bool canRead = getLastBook(last, sizeof(last));      // BACK = back to the book
   drawListBody("Menu", menuItem, menuCount, menuSel, "", "SELECT", canRead ? "READ" : "");
   drawBatteryCorner();
   presentList();
@@ -2371,8 +2371,8 @@ void goInfo() {
   screen = S_INFO;
 }
 
-// Test pinow: pokazuje napiecie na wolnych pinach ADC. Pin dzielnika baterii (przy podlaczonej
-// baterii) pokaze ok. polowy jej napiecia, czyli 1700-2150 mV. Wpisz go jako PIN_BAT_ADC.
+// Pin test: shows the voltage on the free ADC pins. With the battery connected, the battery
+// divider pin shows about half of its voltage, i.e. 1700-2150 mV. Enter it as PIN_BAT_ADC.
 static const uint8_t scanPins[7] = { 3, 8, 15, 16, 17, 18, 20 };
 
 void goPinScan() {
@@ -2396,7 +2396,7 @@ void goPinScan() {
   screen = S_PINSCAN;
 }
 
-// ---------- Statystyki ----------
+// ---------- Statistics ----------
 void goStats() {
   char l[UI_CHARS + 1], d[16];
   gfxClear();
@@ -2411,7 +2411,7 @@ void goStats() {
   snprintf(l, sizeof(l), "Pages read: %u", (unsigned)tst.pages);
   gfxText(UI_X, 50, l, FONT_SIZE);
   if (tst.spdSecs >= 60 && tst.spdBytes >= 2000) {
-    // ok. 7 bajtow na slowo (UTF-8 z polskimi znakami), wiec to tylko przyblizenie
+    // about 7 bytes per word (UTF-8 with Polish characters), so this is only an approximation
     int wpm = (int)(((double)tst.spdBytes / 7.0) / ((double)tst.spdSecs / 60.0));
     snprintf(l, sizeof(l), "Speed: ~%d wpm", wpm);
   } else {
@@ -2443,10 +2443,10 @@ void goStats() {
 }
 
 // ============================================================
-//  Hotspot i strona WWW: ksiazki, ustawienia, obraz uspienia
-//  Czytnik sam tworzy siec WiFi (haslo stale, telefon je zapamieta) i serwuje
-//  strone pod adresem 192.168.4.1. Dostep ma tylko ten, kto zna haslo sieci,
-//  wiec dodatkowy PIN nie jest potrzebny. Strona jest po angielsku.
+//  Hotspot and web page: books, settings, sleep image
+//  The reader creates its own WiFi network (fixed password, the phone remembers it) and serves
+//  the page at 192.168.4.1. Only someone who knows the network password has access,
+//  so no extra PIN is needed. The page is in English.
 // ============================================================
 DNSServer dns;
 
@@ -2465,28 +2465,28 @@ String htmlEsc(const String& s) {
   return o;
 }
 
-// Zlicza zadanie HTTP (diagnostyka: widac, czy telefon w ogole dociera do czytnika)
+// Counts an HTTP request (diagnostics: shows whether the phone reaches the reader at all)
 void countHit(const char* what) {
   httpHits++;
   statusDirty = true;
   Serial.printf("HTTP %s\n", what);
 }
 
-// Zdarzenia hotspotu: ktos sie polaczyl / rozlaczyl / dostal adres IP
+// Hotspot events: someone connected / disconnected / got an IP address
 void onWifiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
   if (event == ARDUINO_EVENT_WIFI_AP_STACONNECTED) {
-    Serial.println("AP: telefon polaczony");
+    Serial.println("AP: phone connected");
     statusDirty = true;
   } else if (event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) {
-    Serial.println("AP: telefon rozlaczony");
+    Serial.println("AP: phone disconnected");
     statusDirty = true;
   } else if (event == ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED) {
-    Serial.println("AP: telefon dostal adres IP");
+    Serial.println("AP: phone got an IP address");
     statusDirty = true;
   }
 }
 
-// ---------- Pomocnicze: strona wysylana kawalkami (bez duzych buforow w RAM) ----------
+// ---------- Helpers: page sent in chunks (no large buffers in RAM) ----------
 void webBegin() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/html", "");
@@ -2527,14 +2527,14 @@ void checkTag(String& h, const char* name, const char* label, bool on) {
   h += "</label>";
 }
 
-// Nazwa do wyswietlenia: bez .txt, '_' -> spacja
+// Display name: without .txt, '_' -> space
 void displayName(const char* fileName, char* out, int maxChars) {
   shortName(fileName, out, maxChars);
   for (char* p = out; *p; p++)
     if (*p == '_') *p = ' ';
 }
 
-// ---------- Strona glowna: ksiazki ----------
+// ---------- Main page: books ----------
 void handleRoot() {
   countHit("/");
   scanBooks();
@@ -2608,16 +2608,16 @@ void handleDelete() {
     LittleFS.remove(path);
     char tp[NAME_LEN + 3];
     tocPathFor(name, tp, sizeof(tp));
-    if (tp[0]) LittleFS.remove(tp);                // razem ze spisem tresci
+    if (tp[0]) LittleFS.remove(tp);                // together with its table of contents
     removeAllIdx(name);
   }
   server.send(200, "text/plain", "OK");
 }
 
-// Przegladarki i systemy sprawdzaja lacznosc, pytajac o znane adresy. Skoro DNS zwraca
-// tu wszystko, odpowiadamy tak, jak odpowiadalby internet - wtedy telefon uznaje siec
-// za sprawna i NIE przerzuca ruchu na dane komorkowe (przez to strona by sie nie otwierala).
-// Pozostale adresy przekierowujemy na strone glowna.
+// Browsers and systems check connectivity by requesting well-known addresses. Since DNS returns
+// this device for everything, we answer the way the internet would - then the phone treats the network
+// as working and does NOT move traffic to mobile data (the page would not open then).
+// All other addresses are redirected to the main page.
 void handleNotFound() {
   countHit(server.uri().c_str());
 #if CAPTIVE_TRICKS
@@ -2643,7 +2643,7 @@ void handleNotFound() {
   server.send(302, "text/plain", "");
 }
 
-// ---------- Ustawienia ----------
+// ---------- Settings ----------
 void handleConfigGet() {
   countHit("/config");
   webBegin();
@@ -2745,7 +2745,7 @@ void handleConfigGet() {
   optTag(h, 2, "Helvetica 12 (thin)", cfg.uiFont == 2);
   optTag(h, 0, "Classic (pixel, old)", cfg.uiFont == 0);
   h += "</select>";
-  if (devMode) {                           // ukryte opcje: tylko w trybie Developer
+  if (devMode) {                           // hidden options: only in developer mode
     h += "<label class='f'>Hotspot power (developer)</label><select name='appower'>";
     optTag(h, 0, "Low (best when the phone or PC is next to the reader)", cfg.apPower == 0);
     optTag(h, 1, "Medium (default)", cfg.apPower == 1);
@@ -2835,7 +2835,7 @@ void handleConfigPost() {
   }
   if (server.hasArg("uifont")) {
     int uf = server.arg("uifont").toInt();
-    if (uf == 1 || uf == 3) uf = 2;         // dawne Helvetica 14 i Unifont
+    if (uf == 1 || uf == 3) uf = 2;         // former Helvetica 14 and Unifont
     if (uf >= 0 && uf <= 3) cfg.uiFont = uf;
   }
   int fe = server.arg("fullev").toInt();
@@ -2853,7 +2853,7 @@ void handleConfigPost() {
   server.send(303);
 }
 
-// Log szacowania baterii (CSV) do pobrania ze strony WWW
+// Battery estimate log (CSV) to download from the web page
 void handleBattLog() {
   String out;
   if (fsOk) {
@@ -2871,7 +2871,7 @@ void handleBattLog() {
   server.send(200, "text/csv", out);
 }
 
-// Ustawianie zegara: przegladarka wysyla aktualny czas (sekundy od 1970) przy kazdym otwarciu strony
+// Clock setting: the browser sends the current time (seconds since 1970) every time the page opens
 void handleTime() {
   long t = server.arg("t").toInt();
   if (t < 1700000000L) {
@@ -2879,14 +2879,14 @@ void handleTime() {
     return;
   }
   clockSet((time_t)t);
-  prefs.putUInt("clk_last", (uint32_t)t);                  // domyslna wartosc przy recznym ustawianiu po utracie zasilania
+  prefs.putUInt("clk_last", (uint32_t)t);                  // default value for manual setting after a power loss
   char b[32], tm[12], dt[12];
   if (clockFormat(tm, sizeof(tm), cfg.clockMode == 2 ? 2 : 1) && clockFormatDate(dt, sizeof(dt))) snprintf(b, sizeof(b), "%s, %s", tm, dt);
   else snprintf(b, sizeof(b), "not set");
   server.send(200, "text/plain", b);
 }
 
-// ---------- Obraz uspienia ----------
+// ---------- Sleep image ----------
 void handleWallpaperPage() {
   countHit("/wallpaper");
   webBegin();
@@ -2959,9 +2959,9 @@ void handleWpReset() {
   server.send(200, "text/plain", "OK");
 }
 
-// ---------- Upload ksiazek ----------
-// Zapis idzie do pliku tymczasowego; dopiero po udanym zakonczeniu
-// podmieniamy nim ksiazke. Przerwany upload nie rusza starej wersji.
+// ---------- Book upload ----------
+// The upload goes to a temporary file; only after it completes successfully
+// does it replace the book. An interrupted upload leaves the old version alone.
 void handleUploadData() {
   HTTPUpload& up = server.upload();
 
@@ -2975,7 +2975,7 @@ void handleUploadData() {
     uploadBytes = 0;
     if (!makeBookName(up.filename.c_str(), uploadName)) {
       if (makeTocName(up.filename.c_str(), uploadName)) {
-        uploadIsToc = true;                // spis tresci z importu EPUB
+        uploadIsToc = true;                // table of contents from an EPUB import
       } else {
         uploadErr = "Only .txt files are accepted";
         return;
@@ -3002,8 +3002,8 @@ void handleUploadData() {
   } else if (up.status == UPLOAD_FILE_END) {
     if (uploadFile) uploadFile.close();
     if (uploadOk) {
-      if (!uploadIsToc) removeAllIdx(uploadName);   // stary indeks juz nie pasuje
-      LittleFS.remove(uploadPath);         // stara wersja (jesli byla)
+      if (!uploadIsToc) removeAllIdx(uploadName);   // the old index no longer fits
+      LittleFS.remove(uploadPath);         // old version (if there was one)
       if (LittleFS.rename(TMP_PATH, uploadPath)) {
         if (!uploadIsToc) {
           strcpy(lastUploaded, uploadName);
@@ -3032,14 +3032,14 @@ void handleUploadFinished() {
   server.send(200, "text/plain", "OK");
 }
 
-// ---------- Ekran trybu upload: kody QR ----------
-// Krok 0: kod QR z danymi sieci (aparat telefonu dolacza do WiFi).
-// Krok 1: kod QR z adresem strony (aparat otwiera przegladarke). OK przelacza kroki.
-// Kod ma wokol siebie spory pusty margines (min. 4 moduly), bo ciemna ramka wyswietlacza
-// tuz obok kodu psuje jego odczyt.
-#define QR_SCALE 3                   // px na modul kodu QR
-#define QR_X 16                      // lewy brzeg kodu (px)
-#define QR_Y(h) ((SCREEN_H - (h)) / 2) // gorny brzeg kodu: srodek wysokosci ekranu
+// ---------- Upload mode screen: QR codes ----------
+// Step 0: QR code with the network details (the phone camera joins the WiFi).
+// Step 1: QR code with the page address (the camera opens the browser). OK switches the steps.
+// The code has a wide empty margin around it (min. 4 modules), because the dark frame of the
+// display right next to the code spoils reading it.
+#define QR_SCALE 3                   // px per QR code module
+#define QR_X 16                      // left edge of the code (px)
+#define QR_Y(h) ((SCREEN_H - (h)) / 2) // top edge of the code: middle of the screen height
 
 void drawUpload() {
   char ssid[24];
@@ -3056,16 +3056,16 @@ void drawUpload() {
   if (uploadStep == 0) snprintf(payload, sizeof(payload), "WIFI:T:WPA;S:%s;P:%s;;", ssid, pass.c_str());
   else snprintf(payload, sizeof(payload), "http://%s", ip);
 
-  // Kod na srodku wysokosci ekranu, tytul nad kolumna tekstu: nad i pod kodem zostaje
-  // co najmniej ~5 modulow pustego marginesu (wczesniej tytul stal tuz nad kodem).
-  int tx = 104;                              // lewy brzeg kolumny tekstu
+  // Code in the middle of the screen height, title above the text column: at least ~5 modules
+  // of empty margin stay above and below the code (the title used to sit right above it).
+  int tx = 104;                              // left edge of the text column
   if (qrEncode(payload, qr)) {
     int h = qr.size * QR_SCALE;
     uiQr(qr, QR_X, QR_Y(h), QR_SCALE);
-    tx = QR_X + h + 12;                      // 12 px (4 moduly) odstepu od kodu
+    tx = QR_X + h + 12;                      // 12 px (4 modules) gap after the code
   }
-  drawTitle(tx, uploadStep == 0 ? "Join WiFi" : "Open page");   // bez ikony WiFi: z nia tytul wchodzil w legende
-  const int maxCh = (SCREEN_W - TAG_COL_W - tx) / 6;   // ile znakow 12 px miesci sie przed legenda
+  drawTitle(tx, uploadStep == 0 ? "Join WiFi" : "Open page");   // no WiFi icon: with it the title ran into the key legend
+  const int maxCh = (SCREEN_W - TAG_COL_W - tx) / 6;   // how many 12 px characters fit before the key legend
 
   if (uploadStep == 0) {
     gfxText(tx, 18, "Scan the code,", FOOT_SIZE);
@@ -3080,7 +3080,7 @@ void drawUpload() {
     gfxText(tx, 66, "in your browser", FOOT_SIZE);
   }
 
-  if (lastUploaded[0]) {                     // po udanym wgraniu: nazwa ksiazki
+  if (lastUploaded[0]) {                     // after a successful upload: the book name
     char sn[24];
     displayName(lastUploaded, sn, max(4, maxCh - 5));
     snprintf(l, sizeof(l), "Got: %s", sn);
@@ -3101,13 +3101,13 @@ void uploadStop() {
 #endif
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_OFF);
-  delay(100);                      // dopiero potem mozna bezpiecznie ponownie wlaczyc WiFi
+  delay(100);                      // only after this can WiFi be turned on again safely
 }
 
-// Uruchamia hotspot. Czysty start stosu WiFi i do 3 prob zmniejszaja ryzyko, ze siec "czasem sie nie pojawia"
-// (np. przy szybkim ponownym wejsciu w Upload albo chwilowym spadku napiecia).
+// Starts the hotspot. A clean start of the WiFi stack and up to 3 attempts lower the risk that the network "sometimes does not appear"
+// (e.g. when entering Upload again quickly or during a brief voltage drop).
 static bool apStart(const char* ssid, const char* pass) {
-  WiFi.persistent(false);                     // nie zapisuj ustawien WiFi we flash
+  WiFi.persistent(false);                     // do not store WiFi settings in flash
   for (int attempt = 1; attempt <= 3; attempt++) {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
@@ -3115,32 +3115,32 @@ static bool apStart(const char* ssid, const char* pass) {
     WiFi.mode(WIFI_AP);
     delay(50);
     WiFi.setSleep(false);
-    if (WiFi.softAP(ssid, pass, AP_CHANNEL, 0, 4)) {                       // widoczna, do 4 klientow
+    if (WiFi.softAP(ssid, pass, AP_CHANNEL, 0, 4)) {                       // visible, up to 4 clients
       String ip = WiFi.softAPIP().toString();
       if (ip != "0.0.0.0") {
-        // Mala moc nadawania: urzadzenie stoi zwykle tuz obok telefonu/komputera, a pelna moc z bliska
-        // przesterowuje odbiornik (siec bywa wtedy widoczna jako "Hidden network") i obciaza zasilanie.
+        // Lower transmit power: the device usually sits right next to the phone/computer, and full power at close range
+        // overloads the receiver (the network may then show up as "Hidden network") and loads the power supply.
         static const wifi_power_t apPowerVals[3] = { WIFI_POWER_8_5dBm, WIFI_POWER_13dBm, WIFI_POWER_19_5dBm };
         WiFi.setTxPower(apPowerVals[cfg.apPower % 3]);
-        Serial.printf("hotspot OK (proba %d): kanal %d, moc %d, wolna pamiec %u B\n", attempt, AP_CHANNEL, cfg.apPower, (unsigned)ESP.getFreeHeap());
+        Serial.printf("hotspot OK (attempt %d): channel %d, power %d, free heap %u B\n", attempt, AP_CHANNEL, cfg.apPower, (unsigned)ESP.getFreeHeap());
         wifi_config_t wc;
-        if (esp_wifi_get_config(WIFI_IF_AP, &wc) == ESP_OK) {          // diagnostyka: czy siec na pewno jest widoczna i szyfrowana
-          Serial.printf("AP: ssid_len=%d ukryta=%d authmode=%d kanal=%d\n", (int)wc.ap.ssid_len, (int)wc.ap.ssid_hidden, (int)wc.ap.authmode, (int)wc.ap.channel);
+        if (esp_wifi_get_config(WIFI_IF_AP, &wc) == ESP_OK) {          // diagnostics: is the network really visible and encrypted
+          Serial.printf("AP: ssid_len=%d hidden=%d authmode=%d channel=%d\n", (int)wc.ap.ssid_len, (int)wc.ap.ssid_hidden, (int)wc.ap.authmode, (int)wc.ap.channel);
         }
         return true;
       }
     }
-    Serial.printf("hotspot: proba %d nieudana\n", attempt);
+    Serial.printf("hotspot: attempt %d failed\n", attempt);
   }
   WiFi.mode(WIFI_OFF);
   return false;
 }
 
 void goUpload() {
-  batteryMv();                     // zmierz baterie PRZED wlaczeniem WiFi (ADC2 przy WiFi nie dziala)
+  batteryMv();                     // measure the battery BEFORE turning on WiFi (ADC2 does not work with WiFi)
 
-  // Siec startuje OD RAZU. Odswiezenie e-papieru trwa ok. 2 s, wiec rysowanie ekranu
-  // przed uruchomieniem hotspotu opozniloby pojawienie sie sieci na telefonie.
+  // The network starts AT ONCE. An e-paper refresh takes about 2 s, so drawing the screen
+  // before starting the hotspot would delay the network appearing on the phone.
   char ssid[24];
   apSsid(ssid, sizeof(ssid));
   String pass = apPassword();
@@ -3152,9 +3152,9 @@ void goUpload() {
     return;
   }
 #if CAPTIVE_TRICKS
-  dns.start(53, "*", WiFi.softAPIP());                  // kazda nazwa -> czytnik
+  dns.start(53, "*", WiFi.softAPIP());                  // every name -> the reader
 #endif
-  Serial.printf("Hotspot: %s, adres %s\n", ssid, WiFi.softAPIP().toString().c_str());
+  Serial.printf("Hotspot: %s, address %s\n", ssid, WiFi.softAPIP().toString().c_str());
 
   lastUploaded[0] = '\0';
   uploadPath[0] = '\0';
@@ -3163,27 +3163,27 @@ void goUpload() {
   uploadStep = 0;
   httpHits = 0;
   statusDirty = false;
-  LittleFS.remove(TMP_PATH);       // resztka po przerwanym uploadzie
+  LittleFS.remove(TMP_PATH);       // leftover of an interrupted upload
   LittleFS.remove(WP_TMP);
   server.begin();
   screen = S_UPLOAD;
-  powerApply();                    // hotspot: procesor min. 160 MHz
+  powerApply();                    // hotspot: processor at least 160 MHz
   drawUpload();
 }
 
 // ============================================================
-//  Obsluga przyciskow dla kazdego ekranu
+//  Button handling for every screen
 // ============================================================
 void onKeyMenu(const KeyEvent& e) {
   if (e.key == KEY_UP && isStep(e)) {
-    menuSel = (menuSel + menuCount - 1) % menuCount;      // z pierwszej pozycji na ostatnia
+    menuSel = (menuSel + menuCount - 1) % menuCount;      // from the first item to the last
     listMoveOnly = true;
     drawMenu();
   } else if (e.key == KEY_DOWN && isStep(e)) {
-    menuSel = (menuSel + 1) % menuCount;                  // z ostatniej na pierwsza
+    menuSel = (menuSel + 1) % menuCount;                  // from the last item to the first
     listMoveOnly = true;
     drawMenu();
-  } else if (e.key == KEY_BACK && isShort(e)) {            // BACK: od razu z powrotem do ksiazki
+  } else if (e.key == KEY_BACK && isShort(e)) {            // BACK: straight back to the book
     char last[NAME_LEN];
     if (getLastBook(last, sizeof(last))) goReader(last);
   } else if (e.key == KEY_OK && isShort(e)) {
@@ -3234,14 +3234,14 @@ void onKeyReader(const KeyEvent& e) {
     saveBookmark();
     closeBook();
     goLibrary();
-  } else if (e.key == KEY_BACK && isLong(e)) {           // dlugie BACK: czcionka, interlinia itd. bez przechodzenia przez menu
+  } else if (e.key == KEY_BACK && isLong(e)) {           // long BACK: font, line spacing etc. without going through the menu
     saveBookmark();
     strncpy(settingsResumeBook, curBook, NAME_LEN - 1);
     settingsResumeBook[NAME_LEN - 1] = '\0';
     closeBook();
     screen = S_SETTINGS;
     settingsFromReader = true;
-    setGroup = 0;                            // grupa Reading
+    setGroup = 0;                            // Reading group
     setSel = 0;
     drawSettings();
   } else if (e.key == KEY_HOME && isShort(e)) {
@@ -3252,26 +3252,26 @@ void onKeyReader(const KeyEvent& e) {
 }
 
 // ============================================================
-//  Gleboki sen
+//  Deep sleep
 // ============================================================
 unsigned long lastActivityMs = 0;
 
-// Czy czytnik zasnal w ksiazce (pamiec RTC przetrwa gleboki sen). Po wybudzeniu: w ksiazce
-// wracamy do ksiazki, poza nia do menu glownego. Po wlaczeniu zasilania jak dotad "Open last book".
+// Did the reader fall asleep in a book (RTC memory survives deep sleep). After waking: in a book
+// back to the book, elsewhere to the main menu. After power-on "Open last book" as before.
 RTC_DATA_ATTR uint8_t sleptInBook = 1;
 
 void goSleep() {
   sleptInBook = (screen == S_READER || screen == S_GOTO) ? 1 : 0;
-  if (clockValid()) prefs.putUInt("clk_last", (uint32_t)clockNow());   // domyslna wartosc przy recznym ustawianiu po utracie zasilania
+  if (clockValid()) prefs.putUInt("clk_last", (uint32_t)clockNow());   // default value for manual setting after a power loss
   Serial.println("sleep");
-  statsFlush();              // dolicz czas czytania (tylko, gdy czytamy) i zapisz statystyki
-  saveBookmark();            // bezpieczne takze poza czytnikiem (ma zabezpieczenia)
-  if (fsOk && cfg.sleepScreen != 2) drawSleepScreen();   // karta ksiazki albo obraz (jedno odswiezenie)
+  statsFlush();              // add the reading time (only while reading) and save the statistics
+  saveBookmark();            // safe outside the reader too (it has safeguards)
+  if (fsOk && cfg.sleepScreen != 2) drawSleepScreen();   // book card or image (one refresh)
   if (fsOk) LittleFS.end();
-  bmUpdate();                // dolicz czas pracy do snu
-  prefs.putUInt("bm_slp", clockValid() ? (uint32_t)clockNow() : 0);   // po wybudzeniu dolicz czas snu
+  bmUpdate();                // add the awake time before sleeping
+  prefs.putUInt("bm_slp", clockValid() ? (uint32_t)clockNow() : 0);   // after waking, add the sleep time
   bmSave();
-  boardDeepSleep();          // nie wraca; po wybudzeniu setup() startuje od nowa
+  boardDeepSleep();          // does not return; after waking setup() starts from scratch
 }
 
 // ============================================================
@@ -3285,8 +3285,8 @@ void setup() {
   boardInit();
   fontInit();
 
-  // Formatowanie kasuje ksiazki, wiec tylko za zgoda (przycisk OK).
-  // Przy pierwszym uruchomieniu na swiezej partycji tak ma byc.
+  // Formatting erases the books, so only with consent (OK button).
+  // On the first start on a fresh partition this is expected.
   fsOk = LittleFS.begin(false);
   if (!fsOk) {
     showMessage("No filesystem", "OK = format", "(erases all books)");
@@ -3319,14 +3319,14 @@ void setup() {
   lastUploaded[0] = '\0';
   uploadPath[0] = '\0';
 
-  boardWaitRelease();        // przycisk budzacy nie moze zadzialac jako komenda
+  boardWaitRelease();        // the wake-up button must not act as a command
 
   buildMenu();
   screen = S_MENU;
   char last[NAME_LEN];
-  bool resumed = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED;   // wybudzenie z glebokiego snu
+  bool resumed = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED;   // woken from deep sleep
   if (cfg.autoOpen && (!resumed || sleptInBook) && getLastBook(last, sizeof(last))) {
-    goReader(last);          // przy bledzie sam pokaze menu
+    goReader(last);          // on an error it shows the menu by itself
   } else {
     drawMenu();
   }
@@ -3345,18 +3345,18 @@ void loop() {
       statusDirty = false;
       drawUpload();
     } else if (statusDirty && !uploadFile && millis() - lastUploadDraw > 4000) {
-      statusDirty = false;       // licznik odswiezamy rzadko i nigdy w trakcie wysylania pliku
+      statusDirty = false;       // the counter is refreshed rarely and never during a file upload
       drawUpload();
     }
   }
 
-  // zakladka: zapis po 4 s bezczynnosci (oszczedza flash)
+  // bookmark: saved after 4 s of inactivity (saves flash)
   if (screen == S_READER && bmDirty && millis() - lastTurnMs > 4000) {
     saveBookmark();
   }
 
-  // Menu glowne: MENU trzymane dalej po "dlugim" wcisnieciu. Puszczone przed 10 s = uspienie
-  // (jak wszedzie), trzymane 10 s = wlacz/wylacz tryb Developer.
+  // Main menu: MENU held on after a "long" press. Released before 10 s = sleep
+  // (as everywhere), held for 10 s = developer mode on/off.
   if (devHoldMs) {
     if (!boardKeyDown(KEY_HOME)) {
       devHoldMs = 0;
@@ -3367,7 +3367,7 @@ void loop() {
       devHoldMs = 0;
       devMode = !devMode;
       prefs.putBool("dev_on", devMode);
-      Serial.printf("tryb Developer: %s\n", devMode ? "wlaczony" : "wylaczony");
+      Serial.printf("developer mode: %s\n", devMode ? "on" : "off");
       if (screen == S_MENU) {
         buildMenu();
         drawMenu();
@@ -3382,12 +3382,12 @@ void loop() {
   if (e.type == EV_NONE) {
     unsigned long lim = (unsigned long)sleepMinutes[cfg.sleepIdx] * 60000UL;
     if (lim && screen != S_UPLOAD && millis() - lastActivityMs > lim) goSleep();
-    idleWait();                 // delay(5) albo lekkie uspienie (Power saving)
+    idleWait();                 // delay(5) or light sleep (Power saving)
     return;
   }
   lastActivityMs = millis();
 
-  // skrot: dlugie HOME = uspij teraz (poza trybem upload); w menu glownym czekamy na puszczenie
+  // shortcut: long HOME = sleep now (except in upload mode); in the main menu we wait for the release
   if (e.key == KEY_HOME && isLong(e) && screen == S_MENU) {
     devHoldMs = millis() - LONG_PRESS_MS;
     return;
@@ -3405,7 +3405,7 @@ void loop() {
       if (e.key == KEY_BACK && isShort(e)) {
         uploadStop();
         goMenu();
-      } else if (e.key == KEY_OK && isShort(e)) {      // przelacz kod QR: siec / strona
+      } else if (e.key == KEY_OK && isShort(e)) {      // switch the QR code: network / page
         uploadStep = 1 - uploadStep;
         drawUpload();
       }

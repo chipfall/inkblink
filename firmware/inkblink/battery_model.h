@@ -1,29 +1,29 @@
 #pragma once
 // ============================================================
-//  Szacowanie stanu baterii BEZ czujnika (CrowPanel V1.2 nie mierzy napiecia baterii).
+//  Battery estimate WITHOUT a sensor (CrowPanel V1.2 cannot measure the battery voltage).
 //
-//  Firmware zlicza, ile czasu spedzil w jakim stanie (czuwanie, hotspot, sen) i ile bylo odswiezen
-//  ekranu, mnozy to przez zmierzony pobor pradu i odejmuje od pojemnosci. Punkt startowy daje
-//  reczne wpisanie napiecia baterii zmierzonego multimetrem (krzywa Li-Po) albo "bateria pelna".
-//  To SZACUNEK - bledy sie kumuluja, dlatego kazde ustawienie zapisuje sie w logu (battlog.csv)
-//  razem z licznikami, zeby stale dalo sie dopasowac pozniej.
+//  The firmware counts how long it spent in each state (awake, hotspot, sleep) and how many screen
+//  refreshes there were, multiplies that by the measured current and subtracts it from the capacity. The
+//  starting point is the battery voltage measured with a multimeter (Li-Po curve) or "battery full".
+//  It is an ESTIMATE - errors add up, so every setting is written to a log (battlog.csv)
+//  together with the counters, so that the constants can be fitted later.
 //
-//  Stale zmierzone na plytce przy 3,7 V; prad prawie nie zalezy od napiecia (3,4-4,2 V), wiec
-//  liczymy w mAh.
+//  Constants measured on the board at 3.7 V; the current hardly depends on the voltage (3.4-4.2 V), so
+//  we count in mAh.
 // ============================================================
 #include <stdint.h>
 
-#define BM_AWAKE_MA_OFF 34.5f     // czuwanie, statyczny ekran, procesor 240 MHz (pomiar)
-#define BM_AWAKE_MA_CPU80 24.0f   // czuwanie, procesor 80 MHz (pomiar 0.9.7)
-#define BM_AWAKE_MA_LIGHT 1.0f    // lekkie uspienie: zasilacz pokazal 0 mA (<1 mA), wartosc z zapasem
-#define BM_HOTSPOT_MA 108.0f      // hotspot wlaczony (pomiar)
-#define BM_FLIP_FAST_MAH 0.0040f  // dodatkowy ladunek jednego szybkiego odswiezenia ekranu (pomiar)
-#define BM_FLIP_FULL_MAH 0.0128f  // ... pelnego odswiezenia (pomiar)
-#define BM_SLEEP_MA 0.33f         // gleboki sen: pomiar 4 dni spadku napiecia (ok. 0,30-0,35 mA)
+#define BM_AWAKE_MA_OFF 34.5f     // awake, static screen, processor 240 MHz (measured)
+#define BM_AWAKE_MA_CPU80 24.0f   // awake, processor 80 MHz (measured, 0.9.7)
+#define BM_AWAKE_MA_LIGHT 1.0f    // light sleep: the power supply showed 0 mA (<1 mA), value with headroom
+#define BM_HOTSPOT_MA 108.0f      // hotspot on (measured)
+#define BM_FLIP_FAST_MAH 0.0040f  // extra charge of one fast screen refresh (measured)
+#define BM_FLIP_FULL_MAH 0.0128f  // ... of a full refresh (measured)
+#define BM_SLEEP_MA 0.33f         // deep sleep: measured from a 4-day voltage drop (about 0.30-0.35 mA)
 
-static const uint16_t BM_CAPS[6] = { 800, 1000, 1200, 1500, 2000, 3000 };   // dostepne pojemnosci (mAh)
+static const uint16_t BM_CAPS[6] = { 800, 1000, 1200, 1500, 2000, 3000 };   // available capacities (mAh)
 
-// Napiecie spoczynkowe ogniwa Li-Po (bez obciazenia) -> procent. Orientacyjne, srodek krzywej jest plaski.
+// Resting voltage of a Li-Po cell (no load) -> percent. Approximate, the middle of the curve is flat.
 static const float BM_V[21] = { 3.27f, 3.61f, 3.69f, 3.71f, 3.73f, 3.75f, 3.77f, 3.79f, 3.80f, 3.82f, 3.84f,
                                 3.85f, 3.87f, 3.91f, 3.95f, 3.98f, 4.02f, 4.08f, 4.11f, 4.15f, 4.20f };
 static const float BM_PCT[21] = { 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100 };
@@ -46,10 +46,10 @@ inline float bmVoltFromPct(float p) {
 }
 
 struct BatModel {
-  bool valid;            // czy znamy punkt startowy (wpisane napiecie albo "pelna")
-  float capMah;          // pojemnosc ogniwa
-  float remMah;          // szacowane pozostale mAh
-  // liczniki od ostatniego ustawienia (do logu)
+  bool valid;            // is the starting point known (entered voltage or "full")
+  float capMah;          // cell capacity
+  float remMah;          // estimated remaining mAh
+  // counters since the last setting (for the log)
   float awakeS, hotspotS, sleepS;
   uint32_t flipsFast, flipsFull;
 };
@@ -73,7 +73,7 @@ inline void bmSpendMah(BatModel& m, float mah) {
 inline float bmAwakeMa(int powerSave) {
   return powerSave == 1 ? BM_AWAKE_MA_CPU80 : powerSave == 2 ? BM_AWAKE_MA_LIGHT : BM_AWAKE_MA_OFF;
 }
-// Czas pracy: hotspot (jesli wlaczony) albo czuwanie z biezacym trybem oszczedzania
+// Awake time: hotspot (if on) or awake with the current power-saving mode
 inline void bmAddRun(BatModel& m, bool hotspot, int powerSave, float seconds) {
   if (hotspot) {
     m.hotspotS += seconds;

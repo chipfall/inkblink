@@ -27,10 +27,17 @@ InkBlink's own code is MIT-licensed (see `LICENSE`). It builds on, and is used t
 
 `firmware/inkblink/` contains the e-paper driver of the CrowPanel board: `EPD.cpp`, `EPD.h`, `EPDfont.h`, `spi.cpp`, `spi.h` (unchanged copies) and `EPD_Init.cpp`, `EPD_Init.h` (modified). The origin is Elecrow's public repository for this board (https://github.com/Elecrow-RD/CrowPanel-ESP32-2.13-E-paper-HMI-Display-with-122-250). `EPDfont.h` is also the source of the bitmap data of the "Classic" font family.
 
-- **Permission:** the repository carries no LICENSE file and the files have no license headers. We asked Elecrow in writing whether the driver files may be included in this public repository and received the answer (e-mail from Elecrow support, October 2026): *"Yes, you can include in your public repository the driver files."* We asked which license applies to the files and whether a LICENSE file could be added; the reply only said the feedback would be passed on to the relevant departments, so **no license text exists**.
-- **What that means:** these files stay the property of Elecrow and are **not** covered by this project's MIT license. They are published here with Elecrow's permission, for use with the CrowPanel hardware. The permission as we received it mentions the repository only; it does not explicitly mention compiled binaries, pre-flashed devices or other commercial use. If you intend those, ask Elecrow for explicit permission first.
-- **Modifications:** `EPD_Init.cpp` / `EPD_Init.h` were changed for hardware V1.2 (JD79661 initialisation, `EPD_DisplayImageFast()` for partial refresh). They carry a header comment saying so.
-- The original e-mail is kept by the project owner.
+- **Permission:** the manufacturer's repository carries no LICENSE file and the files have no license headers. Elecrow support confirmed the following by e-mail (October 2026); the e-mails are kept by the project owner:
+  - the driver files may be included in this public repository;
+  - ready-to-flash firmware binaries containing them may be published free of charge (for example as GitHub releases);
+  - Elecrow devices may be resold flashed with this firmware. The seller flashes the firmware and is responsible for all software-related support, returns and exchanges; Elecrow's warranty covers hardware faults only, under Elecrow's own policies;
+  - modified versions of the files may be published and distributed. Elecrow asked that modified versions **not** carry Elecrow's branding, so `EPD_Init.cpp` / `EPD_Init.h` only say that they are derived from the manufacturer's sample driver and are not supported by the manufacturer;
+  - products may be described as compatible with the Elecrow CrowPanel ESP32 2.13" E-paper display.
+
+  Elecrow could not provide a public license text or statement, so **no license text exists** for these files.
+- **What that means:** the files stay the property of Elecrow and are **not** covered by this project's MIT license. They are published here for use with the CrowPanel hardware. If you reuse them outside this project, ask Elecrow yourself; the permission above was given to this project.
+- **Modifications:** `EPD_Init.cpp` / `EPD_Init.h` were changed for hardware V1.2 (JD79661 initialisation, `EPD_DisplayImageFast()` for partial refresh). The other driver files are unchanged copies.
+- InkBlink is an independent project. It is not made, endorsed or supported by Elecrow.
 
 ## Manufacturer's CAD data
 

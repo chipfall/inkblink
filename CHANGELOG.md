@@ -2,6 +2,19 @@
 
 Versions are `MAJOR.MINOR.PATCH`. During 0.9.x every update package bumps the patch number (`0.9.8` = update 8), so the Info screen always shows which package is installed. A version that has been tested on the device gets a git tag (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
 
+## 0.9.14
+
+- *Hotspot* (password, OK draws a new one) moved from *Power & system* to the hidden Developer menu; the password is still shown on the *Upload books* screen
+- On/off values on the reader are written in capitals: *Battery: OFF*, *Clock: OFF*, *Power saving: OFF* (like *ON/OFF* elsewhere)
+- `docs/USER_GUIDE.md`: serial log examples updated to the English messages
+
+## 0.9.13
+
+- Firmware code comments and serial log messages translated to English (they were Polish), including the Chinese comments in the modified `EPD_Init.cpp/.h`
+- Licensing: `THIRD_PARTY_NOTICES.md` records what Elecrow confirmed by e-mail (publishing source and binaries, reselling flashed devices with software support by the seller, publishing modified files, "compatible with" wording). As Elecrow asked, the modified `EPD_Init.cpp/.h` no longer carry Elecrow's name in their header; they say they are derived from the manufacturer's sample driver and not supported by the manufacturer
+- `docs/HARDWARE.md`: Elecrow confirmed that V1.2 cannot measure the battery and that the schematic in its repository is the V1.2 one; deep-sleep current added
+- `LICENSE`: copyright line without the GitHub organisation name
+
 ## 0.9.12
 
 - Waking up returns to where the reader fell asleep: in a book back to the book, anywhere else to the main menu. After a power-on *Open last book* works as before

@@ -24,9 +24,9 @@ All defined in `firmware/inkblink/board_crowpanel.h`.
 
 - LiPo connector: SH1.0, 2 pins (red/black wires, check the polarity marks "-" and "+" next to the connector before plugging a cell in). A pack with a third (NTC) wire and a 3-pin plug does not fit.
 - Charger: TP4054 (USB-C 5 V -> LiPo). The USB-C socket goes to a CH340K USB-UART bridge, not to the native USB of the ESP32-S3.
-- **The board cannot measure the battery voltage.** In the schematic the `BAT` net only connects the battery connector, the TP4054, two Schottky diodes, a PMOS and a capacitor: no voltage divider, no fuel gauge. The unused ESP32-S3 pins (GPIO3, 8, 15-18, 20, 21) are not connected to anything, which matches measurements on a real board (their readings float and do not follow the battery). Two checks that led here: with the battery plugged in, readings on those pins were the same with and without USB.
-- Caveat: the schematic file in Elecrow's repository states in its description that it was generated from a 4.3-inch design, so it may not be exactly the V1.2 layout. A question to Elecrow is pending.
-- Therefore InkBlink **estimates** the battery (see the user guide, "Battery estimate"). `PIN_BAT_ADC` in `board_crowpanel.h` stays at `-1`; the pin finder on the Info screen is only useful for other boards.
+- **The board cannot measure the battery voltage.** In the schematic the `BAT` net only connects the battery connector, the TP4054, two Schottky diodes, a PMOS and a capacitor: no voltage divider, no fuel gauge. The unused ESP32-S3 pins (GPIO3, 8, 15-18, 20, 21) are not connected to anything, which matches measurements on a real board (their readings float and do not follow the battery). Two checks that led here: with the battery plugged in, readings on those pins were the same with and without USB. Elecrow support confirmed this in October 2026: hardware V1.2 has no way to read the battery voltage (an external circuit is needed), and the schematic in Elecrow's GitHub repository is the one for V1.2.
+- The schematic file's description mentions a 4.3-inch design, but Elecrow confirmed that the file applies to V1.2.
+- Therefore InkBlink **estimates** the battery (see the user guide, "Battery estimate"). `PIN_BAT_ADC` in `board_crowpanel.h` stays at `-1`; the pin finder (*Battery pin test* in the hidden Developer menu) is only useful for a board modified with a voltage divider, or for other boards.
 
 ### Measured current draw (CrowPanel V1.2, supply 3.7 V, via the battery connector)
 
@@ -41,7 +41,7 @@ The current is almost independent of the supply voltage (checked at 3.4 V and 4.
 | Enter Upload (1 s) / hotspot idle | 129 mA / 108 mA |
 | Static page, *Power saving* = CPU 80 | 24 mA (page flip / menu about 32 mA) |
 | Static page, *Power saving* = Light | below 1 mA (supply shows 0 mA, 1 mA resolution; page flip 26-28 mA) |
-| Deep sleep | not measured yet |
+| Deep sleep | about 0.3 mA (4-day voltage-drop test on a 1200 mAh cell) |
 
 Consequence: with the processor at 240 MHz the reading time on a 1200 mAh cell is dominated by the idle current (about 35 h with the screen kept awake, about 50 h at 80 MHz). With light sleep the idle current drops below 1 mA and page flips (about 0.004-0.013 mAh each) become the main cost: 1000 pages use roughly 5-10 mAh. The exact light-sleep and deep-sleep currents still need a measurement with a series resistor.
 

@@ -1,17 +1,17 @@
 #pragma once
 // ============================================================
-//  Czcionki czytnika: rodziny, rozmiary, pogrubienie, szerokosci znakow.
+//  Reader fonts: families, sizes, bold, character widths.
 //
-//  Rodziny:
-//    Classic   - wbudowany font Elecrow, stala szerokosc, rozmiary 12/16 px,
-//                polskie litery skladane z litery + znaczka (patrz board_crowpanel.h)
-//    Helvetica - U8g2 helvR/helvB (_te), 10/12/14/18 px, proporcjonalny, prawdziwe polskie litery
-//    Century   - U8g2 ncenR/ncenB (_te), New Century Schoolbook (szeryfowa), 10/12/14/18 px
+//  Families:
+//    Classic   - built-in Elecrow font, fixed width, sizes 12/16 px,
+//                Polish letters composed from a letter + mark (see board_crowpanel.h)
+//    Helvetica - U8g2 helvR/helvB (_te), 10/12/14/18 px, proportional, real Polish letters
+//    Century   - U8g2 ncenR/ncenB (_te), New Century Schoolbook (serif), 10/12/14/18 px
 //    Unifont   - U8g2 unifont_t_polish, 16 px
 //
-//  Wymaga (w tej kolejnosci przed tym plikiem): Adafruit_GFX.h,
+//  Needs (in this order, before this file): Adafruit_GFX.h,
 //  U8g2_for_Adafruit_GFX.h, board_crowpanel.h.
-//  USE_U8G2 = 0 wylacza Helvetice i Unifont (wtedy biblioteki nie sa potrzebne).
+//  USE_U8G2 = 0 turns off Helvetica and Unifont (the libraries are not needed then).
 // ============================================================
 #include <Arduino.h>
 
@@ -19,14 +19,14 @@
 #define USE_U8G2 1
 #endif
 
-// Dostrajanie rodzin U8g2 (piksele): odstep od gory (na kreski nad Ś, Ź, Ó)
-// i dodatkowy odstep miedzy wierszami.
+// Tuning of the U8g2 families (pixels): space at the top (for the accents on Ś, Ź, Ó)
+// and extra space between lines.
 #define U8_TOP_PAD 2
 #define U8_LINE_GAP 0
 
-enum { FAM_CLASSIC = 0, FAM_HELV = 1, FAM_UNIFONT = 2, FAM_CENTURY = 3 };   // numery zapisane w NVS - nie zmieniac
+enum { FAM_CLASSIC = 0, FAM_HELV = 1, FAM_UNIFONT = 2, FAM_CENTURY = 3 };   // numbers stored in NVS - do not change
 
-static const uint8_t SZ_CLASSIC[2] = { 12, 16 };   // 24 i 32 px usuniete: za malo liter w wierszu
+static const uint8_t SZ_CLASSIC[2] = { 12, 16 };   // 24 and 32 px removed: too few letters per line
 static const uint8_t SZ_HELV[4] = { 10, 12, 14, 18 };
 static const uint8_t SZ_CENTURY[4] = { 10, 12, 14, 18 };
 static const uint8_t SZ_UNIFONT[1] = { 16 };
@@ -48,39 +48,39 @@ inline int fontSizeValue(int f, int si) {
 }
 
 #if USE_U8G2
-// ---------- "Plotno" Adafruit_GFX rysujace do bufora e-papieru ----------
+// ---------- Adafruit_GFX "canvas" drawing into the e-paper buffer ----------
 class EpdCanvas : public Adafruit_GFX {
  public:
   EpdCanvas() : Adafruit_GFX(SCREEN_W, SCREEN_H) {}
   void drawPixel(int16_t x, int16_t y, uint16_t color) override {
-    if (color) gfxInk(x, y);          // kolor 1 = tusz; x od lewej krawedzi
+    if (color) gfxInk(x, y);          // colour 1 = ink; x from the left edge
   }
 };
 static EpdCanvas fontCanvas;
 static U8G2_FOR_ADAFRUIT_GFX u8g2;
 
-// Polskie litery, ktore zostawiamy bez zmian w rodzinach U8g2
+// Polish letters that are kept unchanged in the U8g2 families
 static const uint16_t POLISH[18] = {
   0x0104, 0x0105, 0x0106, 0x0107, 0x0118, 0x0119, 0x0141, 0x0142, 0x0143,
   0x0144, 0x00D3, 0x00F3, 0x015A, 0x015B, 0x0179, 0x017A, 0x017B, 0x017C
 };
 #endif
 
-// ---------- Biezaca czcionka ----------
+// ---------- Current font ----------
 static int fFam = FAM_CLASSIC;
 static int fSize = 1;
 static bool fBold = false;
-static int fLineH = 16;      // wysokosc wiersza
-static int fFixedW = 8;      // szerokosc znaku (0 = proporcjonalny)
-static int fTopPad = 0;      // odstep od gory (rodziny U8g2)
-static int fAsc = 0;         // ascent (rodziny U8g2): linia bazowa = gora wiersza + fAsc
-static int fLineGap = 0;          // dodatkowy odstep miedzy wierszami (interlinia), px
-static bool fSynthBold = false;   // pogrubienie U8g2 przez podwojne rysowanie (+1 px)
+static int fLineH = 16;      // line height
+static int fFixedW = 8;      // character width (0 = proportional)
+static int fTopPad = 0;      // space at the top (U8g2 families)
+static int fAsc = 0;         // ascent (U8g2 families): baseline = top of the line + fAsc
+static int fLineGap = 0;          // extra space between lines (line spacing), px
+static bool fSynthBold = false;   // U8g2 bold by drawing twice (+1 px)
 
 #if USE_U8G2
 static const uint8_t* fFont = nullptr;
-static uint8_t wAscii[95];     // szerokosci znakow 32..126
-static uint8_t wPol[18];       // szerokosci polskich liter
+static uint8_t wAscii[95];     // widths of characters 32..126
+static uint8_t wPol[18];       // widths of Polish letters
 static uint8_t wFallback = 6;
 
 inline int utf8Encode(uint32_t cp, char* out) {
@@ -90,8 +90,8 @@ inline int utf8Encode(uint32_t cp, char* out) {
   return 2;
 }
 
-// Kod znaku -> kod, ktory font U8g2 na pewno ma (ASCII + polskie litery);
-// reszta (cudzyslowy, myslniki, litery z innych jezykow) sprowadzana do ASCII.
+// Character code -> a code the U8g2 font surely has (ASCII + Polish letters);
+// the rest (quotes, dashes, letters of other languages) is mapped to ASCII.
 inline uint32_t fontNorm(uint32_t cp) {
   if (cp >= 32 && cp < 127) return cp;
   if (cp < 32) return ' ';
@@ -104,10 +104,10 @@ inline uint32_t fontNorm(uint32_t cp) {
   return (uint8_t)b;
 }
 
-// Przesuniecie do nastepnego znaku. getUTF8Width() zwraca dla OSTATNIEGO znaku napisu jego
-// szerokosc widoczna (bez odstepow; spacja ma 0), a nie przesuniecie - suma takich wartosci dla
-// pojedynczych znakow jest za mala i wiersze wychodza za prawa krawedz. Roznica
-// szerokosci "cc" i "c" daje czyste przesuniecie niezaleznie od tego, jak liczony jest ostatni znak.
+// Advance to the next character. getUTF8Width() returns for the LAST character of a string its
+// visible width (without spacing; a space is 0), not the advance - the sum of such values for
+// single characters is too small and lines run past the right edge. The difference between the
+// widths of "cc" and "c" gives the pure advance, however the last character is measured.
 static int u8Advance(const char* ch, int n) {
   char s1[4], s2[8];
   memcpy(s1, ch, n);
@@ -116,7 +116,7 @@ static int u8Advance(const char* ch, int n) {
   memcpy(s2 + n, ch, n);
   s2[2 * n] = '\0';
   int adv = u8g2.getUTF8Width(s2) - u8g2.getUTF8Width(s1);
-  if (adv <= 0) adv = u8g2.getUTF8Width(s1) + 1;     // zabezpieczenie (brak glifu itp.)
+  if (adv <= 0) adv = u8g2.getUTF8Width(s1) + 1;     // safety (missing glyph etc.)
   return adv < 1 ? 1 : adv;
 }
 
@@ -135,8 +135,8 @@ static void fontBuildWidths() {
   }
   wFallback = wAscii['?' - 32];
 
-  // Samokalibracja: porownaj sume szerokosci z tabeli z prawdziwa szerokoscia tekstu probnego.
-  // Gdyby tabela dawala mniej, dolicz roznice do kazdego znaku - wiersze nigdy nie wyjda za krawedz.
+  // Self-calibration: compare the sum of the table widths with the real width of a sample text.
+  // If the table gives less, add the difference to every character - lines never run past the edge.
   static const char* probe = "The quick brown fox jumps over the lazy dog. Zażółć gęślą jaźń, WWW iii mmm.";
   int trueW = u8g2.getUTF8Width(probe) + extra;
   int sum = 0, cnt = 0, len = (int)strlen(probe), i = 0;
@@ -158,7 +158,7 @@ static void fontBuildWidths() {
     for (int k = 0; k < 18; k++) wPol[k] = (uint8_t)min(255, wPol[k] + corr);
     wFallback = wAscii['?' - 32];
   }
-  Serial.printf("czcionka: a=%d i=%d spacja=%d W=%d | tekst probny: biblioteka %d px, tabela %d px, korekta +%d\n",
+  Serial.printf("font: a=%d i=%d space=%d W=%d | sample text: library %d px, table %d px, correction +%d\n",
                 wAscii['a' - 32], wAscii['i' - 32], wAscii[0], wAscii['W' - 32], trueW, sum, corr);
 }
 #endif
@@ -170,10 +170,10 @@ inline void fontInit() {
 }
 
 #if USE_U8G2
-// Mierzy rzeczywista wysokosc rysowanych glifow (akcenty nad literami, ogonki pod nimi): rysuje
-// probke do bufora ekranu i szuka najwyzszego/najnizszego zapalonego wiersza wzgledem linii bazowej.
-// getFontAscent()/getFontDescent() podaja tylko wysokosc "A" i "g", wiec bez tego wiersze
-// z Ś, Ż, ą, ę nachodzily na siebie. Bufor jest czyszczony - wolac przed rysowaniem ekranu.
+// Measures the real height of the drawn glyphs (accents above letters, ogoneks below): draws
+// a sample into the screen buffer and looks for the highest/lowest inked row relative to the baseline.
+// getFontAscent()/getFontDescent() only give the height of "A" and "g", so without this, lines
+// with Ś, Ż, ą, ę overlapped. The buffer is cleared - call before drawing a screen.
 static void fontMeasureBox(const char* probe, int& top, int& bottom) {
   gfxClear();
   const int by = 70;
@@ -197,7 +197,7 @@ static void fontMeasureBox(const char* probe, int& top, int& bottom) {
 }
 #endif
 
-// Wybiera czcionke ksiazki. Wolac przy starcie i po zmianie ustawien.
+// Selects the book font. Call at start and after the settings change.
 inline void fontSetLineGap(int px) { fLineGap = px < 0 ? 0 : px > 8 ? 8 : px; }
 
 inline void fontSelect(int fam, int si, bool bold) {
@@ -233,17 +233,17 @@ inline void fontSelect(int fam, int si, bool bold) {
     else fFont = bold ? u8g2_font_ncenB18_te : u8g2_font_ncenR18_te;
   } else {
     fFont = u8g2_font_unifont_t_polish;
-    fSynthBold = bold;                   // Unifont nie ma boldu - pogrubiamy sztucznie (podwojne rysowanie)
+    fSynthBold = bold;                   // Unifont has no bold - we embolden it artificially (drawing twice)
   }
   u8g2.setFont(fFont);
   u8g2.setFontMode(1);
   u8g2.setFontDirection(0);
   u8g2.setForegroundColor(1);
-  fAsc = u8g2.getFontAscent();           // wysokosc litery "A" - polskie znaki sa wyzsze/nizsze
-  int desc = u8g2.getFontDescent();      // wartosc ujemna
+  fAsc = u8g2.getFontAscent();           // height of the letter "A" - Polish characters are taller/lower
+  int desc = u8g2.getFontDescent();      // negative value
   int mTop = 0, mBottom = 0;
   fontMeasureBox(fam == FAM_UNIFONT ? "ĄĆĘŁŃÓŚŹŻąćęłńóśźżgjpqy" : "ąćęłńóśźżbdfhklgjpqy", mTop, mBottom);
-  if (mTop > fAsc) fAsc = mTop;          // linia bazowa nizej, zeby akcenty nie wypadaly poza wiersz
+  if (mTop > fAsc) fAsc = mTop;          // baseline lower, so that accents do not fall outside the line
   if (mBottom > -desc) desc = -mBottom;
   fLineH = fAsc - desc + 1 + U8_LINE_GAP + fLineGap;
   fontBuildWidths();
@@ -254,7 +254,7 @@ inline int fontLineH() { return fLineH; }
 inline int fontFixedW() { return fFixedW; }
 inline int fontTopPad() { return fTopPad; }
 
-// Szerokosc znaku (kod z dekodera UTF-8) w pikselach
+// Width of a character (code from the UTF-8 decoder) in pixels
 inline int fontCharW(uint32_t cp) {
   if (cp == 0) return 0;
   if (fFam == FAM_CLASSIC) return fFixedW;
@@ -270,13 +270,13 @@ inline int fontCharW(uint32_t cp) {
 #endif
 }
 
-// Rysuje 'len' bajtow UTF-8 w jednym wierszu; rowTop = gorna krawedz wiersza
-// (juz z odstepem fontTopPad), x od LEWEJ krawedzi.
+// Draws 'len' UTF-8 bytes in one line; rowTop = top edge of the line
+// (already including fontTopPad), x from the LEFT edge.
 #if USE_U8G2
-// Tekst interfejsu (menu, listy, naglowki). Tryby (ustawienie "Menu font"):
-//   1 = Helvetica 14, 2 = Helvetica 12 (cienszy), 3 = Unifont 16 (stala szerokosc 8 px).
-// Wyrazne "l" (w Classic wyglada jak "1"); w trybach Helvetica prawdziwy bold. Unifont nie ma boldu.
-// y = gorna krawedz wiersza (jak w gfxText).
+// Interface text (menus, lists, titles). Modes ("Menu font" setting):
+//   0 = Classic, 2 = Helvetica 12 (1 and 3 are former modes, treated as 2).
+// Clear "l" (in Classic it looks like "1"); in the Helvetica modes a real bold.
+// y = top edge of the line (as in gfxText).
 inline void uiSetFont(int mode, bool bold) {
   if (mode == 2) u8g2.setFont(bold ? u8g2_font_helvB12_te : u8g2_font_helvR12_te);
   else if (mode == 3) u8g2.setFont(u8g2_font_unifont_t_polish);
@@ -302,7 +302,7 @@ inline void fontDrawLine(int x, int rowTop, const char* s, int len) {
   if (fFam == FAM_CLASSIC) {
     int px = SZ_CLASSIC[fSize];
     int w = gfxTextN(x, rowTop, s, len, px);
-    // EPD_ShowChar maluje tez tlo litery, wiec pogrubiamy gotowy tusz (nie rysujemy drugi raz)
+    // EPD_ShowChar also paints the letter background, so we embolden the finished ink (no second drawing)
     if (fBold) gfxEmbolden(x, rowTop, x + w, rowTop + px, px >= 24 ? 2 : 1);
     return;
   }
@@ -327,8 +327,8 @@ inline void fontDrawLine(int x, int rowTop, const char* s, int len) {
   if (!fSynthBold) {
     u8g2.drawUTF8(x, by, nb);
   } else {
-    // pogrubienie sztuczne: kazdy znak rysowany dwa razy (x i x+1) z TYM SAMYM skokiem, jaki liczy
-    // zawijanie (szerokosc + 1) - inaczej litery stykaja sie, a wiersz jest krotszy niz zakladano
+    // artificial bold: every character drawn twice (x and x+1) with THE SAME advance that the
+    // wrapping uses (width + 1) - otherwise letters touch and the line is shorter than expected
     int px = x, k = 0;
     while (nb[k]) {
       uint32_t cp;

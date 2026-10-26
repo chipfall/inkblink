@@ -61,7 +61,7 @@ These tests check layout, hyphenation, settings, navigation, EPUB conversion, we
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Note: most code comments are currently in Polish; translations and English-only contributions are welcome.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Code comments and contributions are in English.
 
 ## License
 

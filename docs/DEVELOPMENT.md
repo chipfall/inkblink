@@ -59,4 +59,4 @@ make -C tests test-driver   # also the tests that need the real driver files (pa
 
 ## Code language
 
-Most comments in the code are in Polish (the author's language); on-device texts and the web UI are English. Translating comments is a welcome contribution.
+Firmware code comments, on-device texts and the web UI are in English. The PC test programs in `tests/` still print some of their messages in Polish; translating them is a welcome contribution. New code and comments should be in English.

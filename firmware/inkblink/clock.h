@@ -1,8 +1,8 @@
 #pragma once
 // ============================================================
-//  Zegar: czas ustawiany z telefonu (strona WWW w trybie Upload), strefy czasowe z
-//  automatycznym czasem letnim (format POSIX TZ). Czas przezywa uspienie, ale nie
-//  calkowite odlaczenie zasilania - wtedy wystarczy znow otworzyc strone WWW.
+//  Clock: time set from the phone (web page in Upload mode), time zones with
+//  automatic daylight saving time (POSIX TZ format). The time survives sleep, but not
+//  a complete loss of power - then simply open the web page again.
 // ============================================================
 #include <Arduino.h>
 #include <time.h>
@@ -31,14 +31,14 @@ static const TzInfo TZS[] = {
 };
 #define TZ_COUNT 15
 
-static time_t (*clockNowHook)() = nullptr;   // do testow na komputerze
+static time_t (*clockNowHook)() = nullptr;   // for tests on a PC
 static void (*clockSetHook)(time_t) = nullptr;
 
 inline time_t clockNow() {
   return clockNowHook ? clockNowHook() : time(nullptr);
 }
 inline bool clockValid() {
-  return clockNow() > 1700000000L;           // po listopadzie 2023 = czas ustawiony
+  return clockNow() > 1700000000L;           // after November 2023 = time is set
 }
 inline void clockApplyTz(int idx) {
   if (idx < 0 || idx >= TZ_COUNT) idx = 0;
@@ -46,7 +46,7 @@ inline void clockApplyTz(int idx) {
   tzset();
 }
 inline bool clockSet(time_t t) {
-  if (clockSetHook) {                        // testy na komputerze
+  if (clockSetHook) {                        // tests on a PC
     clockSetHook(t);
     return true;
   }
@@ -60,7 +60,7 @@ inline int clockDaysInMonth(int y, int m) {
   if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) return 29;
   return dm[(m - 1) % 12];
 }
-// Ustawia czas z pol w CZASIE LOKALNYM wybranej strefy (strefa musi byc juz ustawiona przez clockApplyTz)
+// Sets the time from fields in the LOCAL TIME of the chosen zone (the zone must already be set by clockApplyTz)
 inline bool clockSetLocal(int y, int mo, int d, int h, int mi) {
   struct tm tmv;
   memset(&tmv, 0, sizeof(tmv));
@@ -69,12 +69,12 @@ inline bool clockSetLocal(int y, int mo, int d, int h, int mi) {
   tmv.tm_mday = d;
   tmv.tm_hour = h;
   tmv.tm_min = mi;
-  tmv.tm_isdst = -1;                         // sam rozpoznaj czas letni
+  tmv.tm_isdst = -1;                         // work out daylight saving time by itself
   time_t t = mktime(&tmv);
   if (t < 1700000000L) return false;
   return clockSet(t);
 }
-// mode: 1 = 24h ("14:35"), 2 = 12h ("2:35pm"). Zwraca false, gdy czas nie jest ustawiony.
+// mode: 1 = 24h ("14:35"), 2 = 12h ("2:35pm"). Returns false when the time is not set.
 inline bool clockFormat(char* out, size_t n, int mode) {
   if (!clockValid()) {
     if (n) out[0] = 0;
@@ -92,7 +92,7 @@ inline bool clockFormat(char* out, size_t n, int mode) {
   }
   return true;
 }
-// Data lokalna "RRRR-MM-DD"; false, gdy czas nie jest ustawiony.
+// Local date "YYYY-MM-DD"; false when the time is not set.
 inline bool clockFormatDate(char* out, size_t n) {
   if (!clockValid()) {
     if (n) out[0] = 0;

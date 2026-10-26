@@ -1,31 +1,31 @@
 #pragma once
 // ============================================================
-//  Proste elementy graficzne interfejsu zbudowane na gfxInk / gfxWhite
-//  (x od LEWEJ krawedzi ekranu, y od gory). Niezalezne od plytki.
-//  Wymaga wczesniej: board_crowpanel.h, qr.h
+//  Simple interface graphics built on gfxInk / gfxWhite
+//  (x from the LEFT edge of the screen, y from the top). Independent of the board.
+//  Needs before it: board_crowpanel.h, qr.h
 // ============================================================
 #include <Arduino.h>
 #include <math.h>
 
-// Wypelniony prostokat tuszem (granice wlacznie)
+// Rectangle filled with ink (bounds inclusive)
 inline void uiFillRect(int x0, int y0, int x1, int y1) {
   for (int y = y0; y <= y1; y++)
     for (int x = x0; x <= x1; x++) gfxInk(x, y);
 }
 
-// Prostokat "bialy" (kasuje tusz)
+// "White" rectangle (erases ink)
 inline void uiClearRect(int x0, int y0, int x1, int y1) {
   for (int y = y0; y <= y1; y++)
     for (int x = x0; x <= x1; x++) gfxWhite(x, y);
 }
 
-// Ramka 1 px
+// 1 px frame
 inline void uiRect(int x0, int y0, int x1, int y1) {
   for (int x = x0; x <= x1; x++) { gfxInk(x, y0); gfxInk(x, y1); }
   for (int y = y0; y <= y1; y++) { gfxInk(x0, y); gfxInk(x1, y); }
 }
 
-// Wypelnione kolo
+// Filled circle
 inline void uiDisc(int cx, int cy, int r, bool ink) {
   for (int y = -r; y <= r; y++)
     for (int x = -r; x <= r; x++)
@@ -35,7 +35,7 @@ inline void uiDisc(int cx, int cy, int r, bool ink) {
       }
 }
 
-// Ikona WiFi: kropka i trzy luki, ramka 16 x 12 px (x, y = lewy gorny rog)
+// WiFi icon: dot and three arcs, 16 x 12 px box (x, y = top left corner)
 inline void uiWifiIcon(int x, int y) {
   const float cx = x + 7.5f;
   const float cy = y + 10.0f;
@@ -49,14 +49,14 @@ inline void uiWifiIcon(int x, int y) {
       }
     }
   }
-  uiFillRect(x + 6, y + 9, x + 8, y + 11);        // kropka
+  uiFillRect(x + 6, y + 9, x + 8, y + 11);        // dot
 }
 
-// Bateria: obrys 20 x 10 + wypustka, wypelnienie proporcjonalne do procentow
-// (zajmuje 22 x 10 px; x, y = lewy gorny rog)
+// Battery: 20 x 10 outline + tip, fill proportional to the percentage
+// (takes 22 x 10 px; x, y = top left corner)
 inline void uiBattery(int x, int y, int pct) {
   uiRect(x, y, x + 19, y + 9);
-  uiFillRect(x + 20, y + 3, x + 21, y + 6);       // wypustka
+  uiFillRect(x + 20, y + 3, x + 21, y + 6);       // tip
   if (pct < 0) return;
   if (pct > 100) pct = 100;
   int w = pct * 16 / 100;
@@ -64,7 +64,7 @@ inline void uiBattery(int x, int y, int pct) {
   if (w > 0) uiFillRect(x + 2, y + 2, x + 1 + w, y + 7);
 }
 
-// Kod QR: kazdy modul to kwadrat scale x scale px; (x, y) = lewy gorny rog pierwszego modulu
+// QR code: every module is a scale x scale px square; (x, y) = top left corner of the first module
 inline void uiQr(const QrCode& q, int x, int y, int scale) {
   for (int my = 0; my < q.size; my++)
     for (int mx = 0; mx < q.size; mx++)

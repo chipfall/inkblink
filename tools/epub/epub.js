@@ -52,7 +52,7 @@ tagList(opf,'item').forEach(function(t){var id=attr(t,'id');if(!id)return;var pr
 var sp=tagList(opf,'spine')[0]||'',sref=attr(sp,'toc');if(sref&&man[sref])ncxId=sref;
 var spine=[];tagList(opf,'itemref').forEach(function(t){var id=attr(t,'idref'),lin=attr(t,'linear');if(id&&man[id]&&lin!=='no'&&/html|xml/.test(man[id].type))spine.push(resolve(opfPath,man[id].href));});
 if(!spine.length)throw new Error('empty book (no text chapters)');
-// spis tresci: NCX albo nav (EPUB3)
+// table of contents: NCX or nav (EPUB3)
 var toc=[];
 if(navId){var nv=await getText(resolve(opfPath,man[navId].href));if(nv){var nb=/<nav\b[^>]*epub:type\s*=\s*["']toc["'][^>]*>([\s\S]*?)<\/nav>/i.exec(nv);var seg=nb?nb[1]:nv,base=resolve(opfPath,man[navId].href),ar=/<a\b([^>]*)>([\s\S]*?)<\/a>/gi,mm;while((mm=ar.exec(seg))){var hr=attr('<a '+mm[1]+'>','href');if(hr)toc.push({file:resolve(base,hr),frag:hr.indexOf('#')>=0?hr.split('#')[1]:'',title:strip(mm[2])});}}}
 if(!toc.length&&ncxId){var nx=await getText(resolve(opfPath,man[ncxId].href));if(nx){var nbase=resolve(opfPath,man[ncxId].href),nr=/<navLabel>\s*<text>([\s\S]*?)<\/text>\s*<\/navLabel>\s*<content\b([^>]*)>/gi,nm2;while((nm2=nr.exec(nx))){var src=attr('<c '+nm2[2]+'>','src');if(src)toc.push({file:resolve(nbase,src),frag:src.indexOf('#')>=0?src.split('#')[1]:'',title:strip(nm2[1])});}}}

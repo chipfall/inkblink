@@ -38,10 +38,10 @@ Black tags on the right edge of the screen show what the three keys (top = HOME,
 | Group | Items |
 |---|---|
 | Reading | Font (Classic / Helvetica / Unifont / Century), size, bold, line spacing, margins, hyphenation |
-| Status line | master switch (turns all items on/off), percent, page n/N, time left, progress bar, clock in book, battery (Off / Low / Always) |
-| Clock | format (Off / 24 h / 12 h), time zone, **Set time** (opens an editor for date and time) |
+| Status line | master switch (turns all items on/off), percent, page n/N, time left, progress bar, clock in book, battery (OFF / Low / Always) |
+| Clock | format (OFF / 24 h / 12 h), time zone, **Set time** (opens an editor for date and time) |
 | Battery | estimate on/off, capacity (800-3000 mAh), **Set voltage** (enter the measured voltage), mark the battery full, clear the estimate |
-| Power & system | sleep time (1 / 5 / 10 / 30 min / never), cover shown while asleep (Book info / Image / Current page), page flip (Full / Fast), menu flip (Fast / Full), **menu font (Helvetica 12 / Classic)**, full refresh every N pages, open last book at start, hotspot password (OK generates a new one) |
+| Power & system | sleep time (1 / 5 / 10 / 30 min / never), cover shown while asleep (Book info / Image / Current page), page flip (Full / Fast), menu flip (Fast / Full), **menu font (Helvetica 12 / Classic)**, full refresh every N pages, open last book at start |
 
 **Set time** - UP/DOWN change the highlighted field (year, month, day, hour, minute; DOWN increases, like in *Go to page*), OK moves to the next field, HOME saves, BACK cancels. The time is entered in the chosen time zone and the date matters: it decides whether daylight saving time applies. If the clock has lost its time (after a full power loss) the editor starts from the last known time, or from the firmware's build date.
 
@@ -68,10 +68,11 @@ The reader uses light sleep whenever it is idle (processor at 80 MHz, woken by a
 **Developer menu** (hidden): in the main menu hold MENU for **10 seconds**; a *Developer* item appears below *Info*. Holding MENU 10 s again hides it. A shorter hold still puts the reader to sleep when you release the key. The Developer menu has:
 
 - *Hotspot power*: Low / **Medium** (default) / High
-- *Power saving*: Off / CPU 80 / **Light** (default)
+- *Power saving*: OFF / CPU 80 / **Light** (default)
+- *Hotspot*: shows the hotspot password; OK draws a new one (phones then have to join the network again)
 - *Battery pin test*: shows the voltage on the free ADC pins, for a board modified with a battery voltage divider
 
-While developer mode is on, the web settings page shows the same two options. Updating to 0.9.11 sets both once to the defaults above.
+While developer mode is on, the web settings page also shows Hotspot power and Power saving. Updating to 0.9.11 sets both once to the defaults above.
 
 ## Sleep and wake
 
@@ -79,7 +80,7 @@ HOME (long) sleeps from anywhere except the Upload screen; the reader also sleep
 
 ## Web interface
 
-Open `http://192.168.4.1` while connected to the reader's WiFi. Anyone who knows the WiFi password can use it, so keep the password private (it is shown in *Settings → Power & system*).
+Open `http://192.168.4.1` while connected to the reader's WiFi. Anyone who knows the WiFi password can use it, so keep the password private (it is shown on the *Upload books* screen; a new one can be drawn in the Developer menu).
 
 - **Books**: drag & drop several files at once, delete books. `.txt` (UTF-8) is uploaded as is. **EPUB** files are converted in your browser to text plus a chapter list (`.txt` and `.toc`), so your phone or computer does the work. Images, fonts and formatting (italics, bold) are dropped; DRM-protected files do not work. The browser must support `DecompressionStream` (recent Chrome, Edge, Safari, Firefox).
 - **Sleep image**: pick any picture; it is converted to a 1-bit 250 x 122 image in the browser (dithering, brightness, invert, fit/cover) with a preview. Drag the preview to move the picture, zoom with the slider, a pinch or the mouse wheel, and use *Rotate 90°* or *Center*.
@@ -98,7 +99,7 @@ No external resources are loaded; the pages work without internet.
 ## Troubleshooting
 
 - **Boot loop after the first upload**: enable *Erase All Flash Before Sketch Upload* once, upload, then disable it.
-- **Hotspot not visible on the phone**: it can take 10-15 seconds to appear; the reader starts it before refreshing the screen. Turn the phone's WiFi off and on to force a fresh scan, and check the *Phones* counter on the Upload screen. The password is kept between sessions, so the phone remembers the network. If the network shows up on a PC as *Hidden network* or twice (once without encryption), the reader is probably too close to the receiver: set **Hotspot power** to *Low* (Developer menu) and keep at least half a metre away. If it stays invisible, check the power supply first (WiFi start draws short current peaks; use USB or a source that can deliver at least 1 A) and look at the serial monitor (115200): `hotspot OK (proba N)` means the radio started, `proba N nieudana` or `Brownout` lines point to a failed start or a power problem.
+- **Hotspot not visible on the phone**: it can take 10-15 seconds to appear; the reader starts it before refreshing the screen. Turn the phone's WiFi off and on to force a fresh scan, and check the *Phones* counter on the Upload screen. The password is kept between sessions, so the phone remembers the network. If the network shows up on a PC as *Hidden network* or twice (once without encryption), the reader is probably too close to the receiver: set **Hotspot power** to *Low* (Developer menu) and keep at least half a metre away. If it stays invisible, check the power supply first (WiFi start draws short current peaks; use USB or a source that can deliver at least 1 A) and look at the serial monitor (115200): `hotspot OK (attempt N)` means the radio started, `hotspot: attempt N failed` or `Brownout` lines point to a failed start or a power problem.
 - **QR code does not scan**: hold the phone 15-25 cm away, avoid reflections on the glossy screen, or take a photo and tap the code in the photo. You can always type the network name and password.
 - **Ghost images after fast page flips**: set *Page flip* to Full or lower *Full refresh every* N pages.
 - **No battery indicator**: this board has no battery sensor; set a starting point in *Settings -> Battery* (see "Battery estimate").

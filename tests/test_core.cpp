@@ -198,7 +198,7 @@ int main(){
     onKeySettings(ok); CHECK(statusAnyOn() && statusVisible() && cfg.showPct && cfg.showPage && cfg.showLeft && cfg.showBar && cfg.clockBook && cfg.batMode==1 && linesPerPage==lpOn);
     for(int i=1;i<=5;i++) CHECK(strstr(settingsItem(i),"ON")!=nullptr); printf("  Status line ON: wszystkie podopcje ON\n");
     setSel=2; onKeySettings(ok); CHECK(!cfg.showPage && statusAnyOn() && strstr(settingsItem(0),"ON")!=nullptr); onKeySettings(ok);             // pojedyncza podopcja nie wylacza glownego
-    CHECK(!batteryAvailable() && strcmp(settingsItem(6),"Battery: Off")==0); setSel=6; onKeySettings(ok); CHECK(cfg.batMode==1); onKeySettings(ok); CHECK(cfg.batMode==1); printf("  bez pomiaru baterii: 'Battery: Off', OK nic nie zmienia\n");
+    CHECK(!batteryAvailable() && strcmp(settingsItem(6),"Battery: OFF")==0); setSel=6; onKeySettings(ok); CHECK(cfg.batMode==1); onKeySettings(ok); CHECK(cfg.batMode==1); printf("  bez pomiaru baterii: 'Battery: OFF', OK nic nie zmienia\n");
     onKeySettings(bk); CHECK(setGroup==-1 && setSel==1);                                              // wraca na te sama grupe
     setSel=2; onKeySettings(ok); CHECK(setGroup==2);                                                  // Clock
     setSel=0; onKeySettings(ok); CHECK(cfg.clockMode==1 && strstr(settingsItem(0),"24h")!=nullptr); onKeySettings(ok); CHECK(cfg.clockMode==2 && strstr(settingsItem(0),"12h")!=nullptr); onKeySettings(ok); CHECK(cfg.clockMode==0);
@@ -210,17 +210,18 @@ int main(){
     setSel=3; onKeySettings(ok); CHECK(cfg.fastMenu && strstr(settingsItem(3),"Fast")!=nullptr); onKeySettings(ok); CHECK(!cfg.fastMenu && strstr(settingsItem(3),"Full")!=nullptr); onKeySettings(ok); CHECK(cfg.fastMenu);
     setSel=4; onKeySettings(ok); CHECK(cfg.uiFont==2 && strstr(settingsItem(4),"Helv 12")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==0 && strstr(settingsItem(4),"Classic")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==2); cfg.uiFont=3; applyLayout(); CHECK(cfg.uiFont==2); cfg.uiFont=0; printf("  Menu font: Helv 12 <-> Classic, dawny Unifont -> Helv 12\n");
     setSel=5; onKeySettings(ok); CHECK(cfg.fullEvery==2); onKeySettings(ok); CHECK(cfg.fullEvery==0);
-    CHECK(settingsCount()==8); for(int i=0;i<8;i++) CHECK(!strstr(settingsItem(i),"power")); printf("  Power & system: 8 pozycji, bez Hotspot power / Power saving\n");
+    CHECK(settingsCount()==7); for(int i=0;i<7;i++) CHECK(!strstr(settingsItem(i),"power") && !strstr(settingsItem(i),"Hotspot")); printf("  Power & system: 7 pozycji, bez Hotspot / Hotspot power / Power saving\n");
     setSel=1; CHECK(strcmp(settingsItem(1),"Cover: Book info")==0); cfg.sleepScreen=2; CHECK(strcmp(settingsItem(1),"Cover: Current page")==0 && strlen(settingsItem(1))<=UI_CHARS-2); cfg.sleepScreen=0; CHECK(strncmp(settingsItem(0),"Sleep time: ",12)==0);
-    setSel=7; onKeySettings(ok); CHECK(strncmp(settingsItem(7),"Hotspot: ",9)==0);
-    { int sg=setGroup; goDeveloper(); CHECK(screen==S_SETTINGS && setGroup==SET_DEV && settingsCount()==3);
+    setSel=6; CHECK(strncmp(settingsItem(6),"Open last book: ",16)==0);
+    { int sg=setGroup; goDeveloper(); CHECK(screen==S_SETTINGS && setGroup==SET_DEV && settingsCount()==4);
       cfg.apPower=0; cfg.powerSave=0;
       setSel=0; onKeySettings(ok); CHECK(cfg.apPower==1 && strstr(settingsItem(0),"Medium")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==2 && strstr(settingsItem(0),"High")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==0 && strstr(settingsItem(0),"Low")!=nullptr);
-      setSel=1; onKeySettings(ok); CHECK(cfg.powerSave==1 && strstr(settingsItem(1),"CPU 80")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==2 && strstr(settingsItem(1),"Light")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==0 && strstr(settingsItem(1),"Off")!=nullptr);
+      setSel=1; onKeySettings(ok); CHECK(cfg.powerSave==1 && strstr(settingsItem(1),"CPU 80")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==2 && strstr(settingsItem(1),"Light")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==0 && strstr(settingsItem(1),"OFF")!=nullptr);
       cfg.powerSave=2; cfg.apPower=1; powerApply();
-      setSel=2; onKeySettings(ok); CHECK(screen==S_PINSCAN);
+      { setSel=2; CHECK(strncmp(settingsItem(2),"Hotspot: ",9)==0); onKeySettings(ok); CHECK(screen==S_SETTINGS && strncmp(settingsItem(2),"Hotspot: ",9)==0 && apPassword().length()==8); }
+      setSel=3; onKeySettings(ok); CHECK(screen==S_PINSCAN);
       KeyEvent bkx{KEY_BACK,EV_SHORT,0}; onKeySettings(bkx); 
-      printf("  Developer: Hotspot power, Power saving, test pinu\n");
+      printf("  Developer: Hotspot power, Power saving, haslo hotspotu, test pinu\n");
       goSettings(); setSel=3; onKeySettings(ok); CHECK(setGroup==3); (void)sg; }
     setSel=settingsCount()-1; onKeySettings(dn); CHECK(setSel==0); onKeySettings(up); CHECK(setSel==settingsCount()-1);
     KeyEvent hm{KEY_HOME,EV_SHORT,0}; onKeySettings(hm); CHECK(screen==S_SETTINGS && setGroup==3); printf("  HOME w ustawieniach nic nie robi\n");
@@ -259,7 +260,7 @@ int main(){
   { auto press=[&](int pin,unsigned long ms){ g_holds={{pin,0,ms}}; g_t0=g_ms; g_readHook=simRead; unsigned long end=g_t0+ms+500; while(g_ms<end){ loop(); g_ms+=5; } g_readHook=nullptr; for(int i=0;i<64;i++) g_pin[i]=1; g_ms+=300; };
     cfg=Settings{FAM_CLASSIC,1,false,true,true,true,1,true}; applyLayout();
     goInfo(); press(PIN_KEY_HOME,150); CHECK(screen==S_INFO); press(PIN_KEY_OK,150); CHECK(screen==S_INFO); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Info: HOME i OK nic, EXIT wraca\n");
-    goDeveloper(); setSel=2; press(PIN_KEY_OK,150); CHECK(screen==S_PINSCAN); press(PIN_KEY_BACK,150); CHECK(screen==S_SETTINGS && setGroup==SET_DEV); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Developer: OK na tescie pinow, EXIT wraca do Developer, potem do menu\n");
+    goDeveloper(); setSel=3; press(PIN_KEY_OK,150); CHECK(screen==S_PINSCAN); press(PIN_KEY_BACK,150); CHECK(screen==S_SETTINGS && setGroup==SET_DEV); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Developer: OK na tescie pinow, EXIT wraca do Developer, potem do menu\n");
     { devMode=false; goMenu(); int n0=menuCount; g_slept=false;
       press(PIN_KEY_HOME,10500); CHECK(devMode && !g_slept && menuCount==n0+1 && strcmp(menuLabels[menuCount-1],"Developer")==0 && prefs.getBool("dev_on",false));
       menuSel=menuCount-1; press(PIN_KEY_OK,150); CHECK(screen==S_SETTINGS && setGroup==SET_DEV); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU);
