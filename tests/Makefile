@@ -23,8 +23,8 @@ CPP_TESTS := test_core test_ui_features test_fonts_margins test_clock_settings \
              test_hyphenation_layout test_toc_chapters test_glyph_widths \
              test_battery test_battery_estimate test_menu_shortcuts test_arduino_prototypes test_no_u8g2
 
-.PHONY: test test-cpp test-js test-meta test-driver clean dirs fixtures
-test: test-cpp test-js test-meta
+.PHONY: test test-cpp test-js test-meta test-strict test-driver clean dirs fixtures
+test: test-strict test-cpp test-js test-meta
 	@echo; echo "ALL TESTS PASSED"
 
 dirs:
@@ -72,6 +72,12 @@ test-js: dirs fixtures
 	@python3 ../tools/sync_webui_epub.py --check
 	@node ../tools/epub/test_epub.mjs $(B)/samples | tail -1
 	@node ../tools/epub/test_books_page.mjs $(B)/samples | tail -1
+
+# Narrowing in brace initialisers is an error on ESP32 core 3.x but silent with -w (core 2.x
+# default), so check the sketch for it separately, without -w.
+test-strict: $(B)/sketch/.stamp
+	@$(CXX) -std=c++17 -fsyntax-only -Werror=narrowing $(STUB_INC) test_core.cpp 2>&1 | grep -A3 "narrowing" ; \
+	  if $(CXX) -std=c++17 -fsyntax-only -Werror=narrowing $(STUB_INC) test_core.cpp > /dev/null 2>&1; then echo "==== STRICT (narrowing): OK ===="; else echo "FAILED: narrowing conversion (see above)"; exit 1; fi
 
 test-meta:
 	@python3 check_version.py

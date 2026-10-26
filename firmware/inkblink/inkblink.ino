@@ -44,7 +44,7 @@
 #include "reader_fonts.h"       // book fonts
 #include "webui_assets.h"       // web page (HTML/CSS/JS)
 
-#define FW_VERSION "0.9.14"         // 0.9.N = package/update N (see docs/DEVELOPMENT.md); must match CHANGELOG.md
+#define FW_VERSION "0.9.16"         // 0.9.N = package/update N (see docs/DEVELOPMENT.md); must match CHANGELOG.md
 
 // ---------- Screen / interface settings ----------
 #define FONT_SIZE 16            // interface font (menus, messages)
@@ -1035,7 +1035,7 @@ bool drawWallpaperFile() {
 void drawDefaultWallpaper() {
   uiDisc(196, 44, 26, true);                  // crescent moon = disc minus a shifted disc
   uiDisc(208, 36, 23, false);
-  static const int8_t stars[8][3] = {         // x, y, size
+  static const uint8_t stars[8][3] = {        // x, y, size (uint8_t: x goes up to 236)
     { 30, 18, 2 }, { 74, 36, 1 }, { 120, 14, 2 }, { 150, 52, 1 },
     { 236, 22, 1 }, { 148, 28, 1 }, { 96, 70, 1 }, { 232, 90, 2 }
   };

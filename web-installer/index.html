@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InkBlink – install from the browser</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#66645e; --line:#dedbd2; --accent:#1f5f8b; --warn:#fff4d6; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --fg:#ecebe6; --mute:#a3a19a; --line:#34332f; --accent:#7fb6dc; --warn:#3a3220; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:44rem; margin:0 auto; padding:2.5rem 1.25rem 4rem; }
+  h1 { font-size:1.9rem; margin:0 0 .2rem; letter-spacing:-.01em; }
+  .sub { color:var(--mute); margin:0 0 2rem; }
+  h2 { font-size:1.1rem; margin:2rem 0 .5rem; }
+  ol { padding-left:1.3rem; } li { margin:.35rem 0; }
+  .box { border:1px solid var(--line); border-radius:10px; padding:1.25rem; margin:1.5rem 0; }
+  .warn { background:var(--warn); border-color:transparent; }
+  esp-web-install-button button { font:inherit; font-weight:600; padding:.7rem 1.4rem; border-radius:8px; border:0; background:var(--accent); color:var(--bg); cursor:pointer; }
+  a { color:var(--accent); }
+  small, .mute { color:var(--mute); }
+  code { font-size:.92em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>InkBlink</h1>
+  <p class="sub">E-book reader firmware for the Elecrow CrowPanel ESP32 2.13" E-paper (hardware V1.2). Version <b>__VERSION__</b>.</p>
+
+  <div class="box">
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate">Install InkBlink __VERSION__</button>
+      <span slot="unsupported">Your browser cannot talk to USB devices. Use <b>Chrome</b> or <b>Edge</b> on a computer (Windows, macOS, Linux).</span>
+      <span slot="not-allowed">The page must be opened over https.</span>
+    </esp-web-install-button>
+  </div>
+
+  <h2>How to install</h2>
+  <ol>
+    <li>Connect the reader to the computer with a USB-C <b>data</b> cable.</li>
+    <li>Click <b>Install</b>, choose the serial port (usually <i>USB-SERIAL CH340</i>) and confirm.</li>
+    <li>When asked about erasing: <b>leave it unticked</b> for an update – your books stay. Tick it only for the first install over the factory firmware or if the reader does not start after installing (this deletes all books and settings).</li>
+    <li>Wait until it reports success. The reader restarts by itself.</li>
+  </ol>
+
+  <div class="box warn">
+    <b>No port in the list?</b> Windows usually installs the CH340 driver by itself; if not, install the CH340 driver from the chip maker (WCH) and plug the cable in again.<br>
+    <b>Connects but does not start writing?</b> Hold <b>BOOT</b>, press and release <b>RESET</b>, release BOOT, then click Install again.
+  </div>
+
+  <h2>Files and source</h2>
+  <p>The release <code>.bin</code> files and the change log are on the project's GitHub Releases page. Source code: MIT license, except the display driver files, which are derived from the board manufacturer's sample driver (see <code>THIRD_PARTY_NOTICES.md</code>).</p>
+  <p class="mute"><small>InkBlink is an independent project, compatible with the Elecrow CrowPanel ESP32 2.13" E-paper. It is not made or supported by Elecrow; questions about the software go to the InkBlink project.</small></p>
+</main>
+</body>
+</html>

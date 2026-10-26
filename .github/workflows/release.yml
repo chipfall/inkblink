@@ -1,0 +1,125 @@
+name: release
+
+# Builds the firmware for a version tag (git tag v0.9.X && git push --tags), attaches the
+# .bin files to a GitHub Release and publishes the browser installer (web-installer/) on
+# GitHub Pages. Can also be started by hand from the Actions tab for an existing tag.
+#
+# One-time setup (repository Settings):
+#   - Pages -> Source: GitHub Actions
+#   - Environments -> github-pages -> Deployment branches and tags: add the tag rule  v*
+# GitHub Pages for a private repository needs a paid plan; on the free plan the repository
+# must be public.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build, e.g. v0.9.15'
+        required: true
+
+env:
+  # Pin the ESP32 Arduino core to the version the release was tested with (e.g. 3.1.1);
+  # empty = newest.
+  ESP32_CORE_VERSION: '2.0.15'
+  FQBN: esp32:esp32:esp32s3:FlashSize=8M,PSRAM=opi,CDCOnBoot=default
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Version from the tag must match FW_VERSION
+        id: ver
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="${TAG#v}"
+          FW=$(sed -n 's/^#define FW_VERSION "\([^"]*\)".*/\1/p' firmware/inkblink/inkblink.ino)
+          echo "tag $TAG, FW_VERSION $FW"
+          [ "$VER" = "$FW" ] || { echo "::error::tag $TAG does not match FW_VERSION $FW"; exit 1; }
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Host tests
+        run: make -C tests test && make -C tests test-driver
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install the ESP32 core and libraries
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install "esp32:esp32${ESP32_CORE_VERSION:+@$ESP32_CORE_VERSION}"
+          arduino-cli lib install "Adafruit GFX Library" "U8g2_for_Adafruit_GFX"
+          arduino-cli core list
+          arduino-cli lib list
+
+      - name: Compile
+        run: arduino-cli compile --fqbn "$FQBN" --output-dir build firmware/inkblink
+
+      - name: Collect the binaries
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          ls -l build
+          BOOT_APP0=$(find ~/.arduino15/packages/esp32/hardware/esp32 -name boot_app0.bin | head -1)
+          [ -n "$BOOT_APP0" ] || { echo "::error::boot_app0.bin not found"; exit 1; }
+          mkdir -p site/firmware dist
+          cp web-installer/* site/
+          cp build/inkblink.ino.bootloader.bin  site/firmware/bootloader.bin
+          cp build/inkblink.ino.partitions.bin  site/firmware/partitions.bin
+          cp "$BOOT_APP0"                       site/firmware/boot_app0.bin
+          cp build/inkblink.ino.bin             site/firmware/inkblink.bin
+          sed -i "s/__VERSION__/$VER/g" site/manifest.json site/index.html
+          # Whole image WITHOUT the book storage (stops at the end of the app, no padding):
+          # flashing it at 0x0 keeps the books.
+          pip install --quiet esptool==4.8.1
+          esptool.py --chip esp32s3 merge_bin -o "dist/inkblink-$VER.bin" \
+            0x0 site/firmware/bootloader.bin 0x8000 site/firmware/partitions.bin \
+            0xe000 site/firmware/boot_app0.bin 0x10000 site/firmware/inkblink.bin
+          cp site/firmware/inkblink.bin "dist/inkblink-$VER-app.bin"
+          ls -l site site/firmware dist
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+          awk -v h="## $VER" 'index($0,h)==1{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > notes.md
+          printf '\n---\nInstall from the browser: https://%s.github.io/%s/\n\n`inkblink-%s.bin`: whole image, flash at 0x0 (keeps the books). `inkblink-%s-app.bin`: application only, flash at 0x10000.\n' \
+            "${{ github.repository_owner }}" "${{ github.event.repository.name }}" "$VER" "$VER" >> notes.md
+          cat notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "InkBlink $VER" --notes-file notes.md --prerelease
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

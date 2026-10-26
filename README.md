@@ -25,9 +25,13 @@ It turns the board into a small pocket reader: plain-text books and EPUB files (
 - Battery estimate (the board has no battery sensor): based on time awake / asleep and screen refreshes, started from a voltage you enter, with a downloadable log; power saving with light sleep (below 1 mA on a static page)
 - Fast, flash-free refresh when moving through menus (can be switched to full refresh)
 
-## Quick start
+## Install from the browser
 
-1. Install **Arduino IDE 2.x** with the **ESP32 Arduino core 3.x** and these libraries: `Adafruit GFX Library`, `U8g2_for_Adafruit_GFX`.
+Open **https://chipfall.github.io/inkblink/** in Chrome or Edge on a computer, connect the reader with a USB-C cable and click *Install*. Updating this way keeps your books. The `.bin` files are also on the Releases page.
+
+## Quick start (build it yourself)
+
+1. Install **Arduino IDE 2.x** with the **ESP32 Arduino core 2.0.15** (the version releases are built with; 3.x is not tested) and these libraries: `Adafruit GFX Library`, `U8g2_for_Adafruit_GFX`.
 2. Open `firmware/inkblink/inkblink.ino` and select **ESP32S3 Dev Module** with:
    - Flash size **8 MB**, PSRAM **OPI PSRAM**, **USB CDC On Boot: Disabled**
    - the included `partitions.csv` (2 MB app + ~5.9 MB LittleFS for books; Arduino uses it automatically when it sits next to the sketch)

@@ -1,5 +1,9 @@
 # InkBlink user guide
 
+## Installing and updating
+
+Open **https://chipfall.github.io/inkblink/** in Chrome or Edge on a computer, connect the reader over USB-C and click *Install*. Leave *Erase* unticked for an update: books and settings stay. Tick it only for the first install over the factory firmware or when the reader does not start (it deletes all books). If the browser connects but does not write, hold BOOT, press RESET, release BOOT and try again. The version installed is shown in *Info*.
+
 ## Controls
 
 The board has a **wheel** that rotates and clicks, plus two buttons next to it.

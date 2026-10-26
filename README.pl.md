@@ -6,9 +6,13 @@ Książki (`.txt` i EPUB) wgrywasz przez własną sieć WiFi czytnika, bez karty
 
 **Stan: beta.** Rozwijane i sprawdzane na jednej płytce V1.2. Logika jest pokryta testami na komputerze, ale działanie ekranu, baterii i zegara sprawdzane jest ręcznie.
 
+## Instalacja z przeglądarki
+
+Otwórz **https://chipfall.github.io/inkblink/** w Chrome lub Edge na komputerze, podłącz czytnik kablem USB-C i kliknij *Install*. Aktualizacja w ten sposób nie kasuje książek.
+
 ## Szybki start
 
-1. Arduino IDE 2.x + rdzeń ESP32 3.x, biblioteki `Adafruit GFX Library` i `U8g2_for_Adafruit_GFX`.
+1. Arduino IDE 2.x + rdzeń ESP32 2.0.15 (tą wersją budowane są wydania; 3.x nie jest sprawdzony), biblioteki `Adafruit GFX Library` i `U8g2_for_Adafruit_GFX`.
 2. Otwórz `firmware/inkblink/inkblink.ino`: płytka *ESP32S3 Dev Module*, Flash 8 MB, PSRAM OPI, USB CDC On Boot: Disabled, plik `partitions.csv` obok szkicu.
 3. Wgraj. Jeśli po pierwszym wgraniu płytka się zapętla, włącz raz „Erase All Flash Before Sketch Upload”.
 4. Książki: **Menu → Upload**, połącz się z siecią `InkBlink-XXXX` (kod QR lub hasło z ekranu), otwórz `http://192.168.4.1` i przeciągnij pliki `.txt` / `.epub`.

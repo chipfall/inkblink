@@ -2,6 +2,18 @@
 
 Versions are `MAJOR.MINOR.PATCH`. During 0.9.x every update package bumps the patch number (`0.9.8` = update 8), so the Info screen always shows which package is installed. A version that has been tested on the device gets a git tag (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
 
+## 0.9.16
+
+- Fix: the built-in sleep image (moon and stars) drew only 4 of its 8 stars; the star positions were stored in a type that cannot hold x > 127. Found by the first CI build (ESP32 core 3.x treats it as an error)
+- Tests: `make test` also checks the sketch for narrowing conversions, which Arduino IDE with core 2.x hides
+
+## 0.9.15
+
+- Releases: `.github/workflows/release.yml` builds the firmware when a version tag is pushed, attaches `inkblink-<version>.bin` (whole image without the book storage, flash at 0x0) and `inkblink-<version>-app.bin` to a GitHub Release, and publishes the browser installer from `web-installer/` (ESP Web Tools) on GitHub Pages. Updating from the browser keeps the books unless *Erase* is ticked
+- Both workflows build with ESP32 Arduino core 2.0.15, the version used in Arduino IDE (README said 3.x)
+- `compile-esp32` workflow keeps the compiled `.bin` files as a downloadable artifact
+- Docs: install from the browser (README, user guide), release steps (`docs/DEVELOPMENT.md`), roadmap updated
+
 ## 0.9.14
 
 - *Hotspot* (password, OK draws a new one) moved from *Power & system* to the hidden Developer menu; the password is still shown on the *Upload books* screen

@@ -53,9 +53,14 @@ make -C tests test-driver   # also the tests that need the real driver files (pa
 - Versions are `MAJOR.MINOR.PATCH` (minor = new features, `1.0.0` = considered stable).
 - During 0.9.x **every update package bumps the patch number**: update 8 = `0.9.8`, update 9 = `0.9.9`, then `0.9.10` and so on. The on-device Info screen shows `FW_VERSION`, so you always see which package is flashed and a bug report always names its build.
 - With each package: set `FW_VERSION` in `inkblink.ino` and add a heading for the new version at the top of `CHANGELOG.md`; commit message e.g. "0.9.8: light sleep fix".
-- When a version has been tested on the device and is worth keeping, tag it: add the date to its changelog heading, commit, then `git tag v0.9.8` and `git push --tags`. Only tagged versions are releases (and, later, get `.bin` files).
+- When a version has been tested on the device and is worth keeping, tag it: add the date to its changelog heading, commit, then `git tag v0.9.8` and `git push --tags`. Only tagged versions are releases.
+- Pushing a tag starts `.github/workflows/release.yml`: it checks that the tag equals `FW_VERSION`, runs the host tests, compiles with arduino-cli, creates a GitHub Release (pre-release) with the notes from `CHANGELOG.md` and two files, and publishes the browser installer (`web-installer/`, ESP Web Tools) on GitHub Pages. It can be re-run by hand for an existing tag (Actions, *release*, *Run workflow*).
+  - `inkblink-<version>.bin`: bootloader + partition table + boot_app0 + app merged, flash at `0x0`. It ends after the app on purpose, so the LittleFS area with the books is not touched.
+  - `inkblink-<version>-app.bin`: the app alone, flash at `0x10000`.
+  - One-time setup: Settings, Pages, Source *GitHub Actions*; Settings, Environments, *github-pages*: allow tags `v*`. Pages for a private repository needs a paid plan.
+  - `ESP32_CORE_VERSION` at the top of the workflow pins the Arduino core; set it to the version the release was tested with in Arduino IDE.
 - `tests/check_version.py` (part of `make test`) verifies that `FW_VERSION` is well formed and equals the newest `CHANGELOG.md` heading.
-- Release binaries contain the manufacturer's driver code. Elecrow's permission as received covers including the files in this repository; it does not explicitly mention compiled binaries or commercial use (see `THIRD_PARTY_NOTICES.md`), so ask Elecrow before selling pre-flashed devices.
+- Release binaries contain the driver code derived from the manufacturer's sample. Elecrow confirmed by e-mail that free binaries may be published and flashed boards resold (details and conditions in `THIRD_PARTY_NOTICES.md`).
 
 ## Code language
 
