@@ -41,7 +41,7 @@ Black tags on the right edge of the screen show what the three keys (top = HOME,
 | Status line | master switch (turns all items on/off), percent, page n/N, time left, progress bar, clock in book, battery (Off / Low / Always) |
 | Clock | format (Off / 24 h / 12 h), time zone, **Set time** (opens an editor for date and time) |
 | Battery | estimate on/off, capacity (800-3000 mAh), **Set voltage** (enter the measured voltage), mark the battery full, clear the estimate |
-| Power & system | sleep after (1 / 5 / 10 / 30 min / never), sleep screen (Book / Image / Keep), page flip (Full / Fast beta), menu flip (Fast / Full), **menu font (Helvetica 12 / Unifont / Classic)**, **hotspot power (Low / Medium / High)**, **power saving (Off / CPU 80 / Light sleep)**, full refresh every N pages, open last book at start, hotspot password (OK generates a new one) |
+| Power & system | sleep time (1 / 5 / 10 / 30 min / never), cover shown while asleep (Book info / Image / Current page), page flip (Full / Fast), menu flip (Fast / Full), **menu font (Helvetica 12 / Classic)**, full refresh every N pages, open last book at start, hotspot password (OK generates a new one) |
 
 **Set time** - UP/DOWN change the highlighted field (year, month, day, hour, minute; DOWN increases, like in *Go to page*), OK moves to the next field, HOME saves, BACK cancels. The time is entered in the chosen time zone and the date matters: it decides whether daylight saving time applies. If the clock has lost its time (after a full power loss) the editor starts from the last known time, or from the firmware's build date.
 
@@ -61,20 +61,28 @@ The CrowPanel V1.2 cannot measure its battery ([HARDWARE.md](HARDWARE.md)), so I
 
 Limits: the voltage-to-percent curve is flat in the middle (3.7-3.9 V), so a single voltage is a rough starting point; errors accumulate; deep sleep time is only counted when the clock was set before and after (set it on the web page), and the sleep current is a placeholder until it is measured. Every setting is appended to a log (`/battlog.csv`, downloadable from the web page) together with the counters since the previous entry, so the model can be refined later.
 
-## Power saving (experimental)
+## Power saving and the Developer menu
 
-*Settings -> Power & system -> Power saving*: **Off** (processor 240 MHz), **CPU 80** (processor 80 MHz; 160 MHz while the hotspot runs, 240 MHz while a book is being indexed) and **Light** (80 MHz plus light sleep whenever the reader is idle, woken by any button; never while the hotspot is on). Default is Off. In a book light sleep starts right after a page flip; in menus and settings 1.5 s after the last button press, so scrolling has no lag. Measured idle current on a static page: Off 34-35 mA, CPU 80 24 mA, Light below 1 mA, so Light gives by far the longest reading time.
+The reader uses light sleep whenever it is idle (processor at 80 MHz, woken by any button; never while the hotspot is on). In a book it sleeps right after a page flip; in menus and settings 1.5 s after the last button press, so scrolling has no lag. Measured idle current on a static page: below 1 mA (34-35 mA without power saving).
+
+**Developer menu** (hidden): in the main menu hold MENU for **10 seconds**; a *Developer* item appears below *Info*. Holding MENU 10 s again hides it. A shorter hold still puts the reader to sleep when you release the key. The Developer menu has:
+
+- *Hotspot power*: Low / **Medium** (default) / High
+- *Power saving*: Off / CPU 80 / **Light** (default)
+- *Battery pin test*: shows the voltage on the free ADC pins, for a board modified with a battery voltage divider
+
+While developer mode is on, the web settings page shows the same two options. Updating to 0.9.11 sets both once to the defaults above.
 
 ## Sleep and wake
 
-HOME (long) sleeps from anywhere except the Upload screen; the reader also sleeps after the time set in *Power & system*. The sleep screen can show a card with the book title, progress and estimated time left, your own picture, or keep the current screen. **Wake with a click of the wheel (OK).** The clock keeps running through sleep, but not after a full power loss.
+HOME (long) sleeps from anywhere except the Upload screen; the reader also sleeps after the time set in *Power & system*. The sleep screen can show a card with the book title, progress and estimated time left, your own picture, or leave the current page on the screen. **Wake with a click of the wheel (OK).** If it fell asleep in a book it opens the book again, otherwise the main menu. The clock keeps running through sleep, but not after a full power loss.
 
 ## Web interface
 
 Open `http://192.168.4.1` while connected to the reader's WiFi. Anyone who knows the WiFi password can use it, so keep the password private (it is shown in *Settings → Power & system*).
 
 - **Books**: drag & drop several files at once, delete books. `.txt` (UTF-8) is uploaded as is. **EPUB** files are converted in your browser to text plus a chapter list (`.txt` and `.toc`), so your phone or computer does the work. Images, fonts and formatting (italics, bold) are dropped; DRM-protected files do not work. The browser must support `DecompressionStream` (recent Chrome, Edge, Safari, Firefox).
-- **Sleep image**: pick any picture; it is converted to a 1-bit 250 x 122 image in the browser (dithering, brightness, invert, fit/cover) with a preview.
+- **Sleep image**: pick any picture; it is converted to a 1-bit 250 x 122 image in the browser (dithering, brightness, invert, fit/cover) with a preview. Drag the preview to move the picture, zoom with the slider, a pinch or the mouse wheel, and use *Rotate 90°* or *Center*.
 - **Settings**: every setting from the device, including the status-line master switch and time zone.
 - **Clock**: every page load sends your phone's time to the reader.
 
@@ -90,7 +98,7 @@ No external resources are loaded; the pages work without internet.
 ## Troubleshooting
 
 - **Boot loop after the first upload**: enable *Erase All Flash Before Sketch Upload* once, upload, then disable it.
-- **Hotspot not visible on the phone**: it can take 10-15 seconds to appear; the reader starts it before refreshing the screen. Turn the phone's WiFi off and on to force a fresh scan, and check the *Phones* counter on the Upload screen. The password is kept between sessions, so the phone remembers the network. If the network shows up on a PC as *Hidden network* or twice (once without encryption), the reader is probably too close to the receiver: set **Hotspot power** to *Low* and keep at least half a metre away. If it stays invisible, check the power supply first (WiFi start draws short current peaks; use USB or a source that can deliver at least 1 A) and look at the serial monitor (115200): `hotspot OK (proba N)` means the radio started, `proba N nieudana` or `Brownout` lines point to a failed start or a power problem.
+- **Hotspot not visible on the phone**: it can take 10-15 seconds to appear; the reader starts it before refreshing the screen. Turn the phone's WiFi off and on to force a fresh scan, and check the *Phones* counter on the Upload screen. The password is kept between sessions, so the phone remembers the network. If the network shows up on a PC as *Hidden network* or twice (once without encryption), the reader is probably too close to the receiver: set **Hotspot power** to *Low* (Developer menu) and keep at least half a metre away. If it stays invisible, check the power supply first (WiFi start draws short current peaks; use USB or a source that can deliver at least 1 A) and look at the serial monitor (115200): `hotspot OK (proba N)` means the radio started, `proba N nieudana` or `Brownout` lines point to a failed start or a power problem.
 - **QR code does not scan**: hold the phone 15-25 cm away, avoid reflections on the glossy screen, or take a photo and tap the code in the photo. You can always type the network name and password.
 - **Ghost images after fast page flips**: set *Page flip* to Full or lower *Full refresh every* N pages.
 - **No battery indicator**: this board has no battery sensor; set a starting point in *Settings -> Battery* (see "Battery estimate").

@@ -62,7 +62,7 @@ label.c{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:15px}
 label.c input{width:18px;height:18px;accent-color:var(--acc)}
 .note{margin:6px 0 0;font-size:13px;color:var(--mut)}
 .toast{padding:10px 14px;border-radius:10px;background:rgba(18,161,80,.12);color:var(--ok);font-weight:600;margin-bottom:14px}
-canvas{width:100%;max-width:500px;image-rendering:pixelated;border:1px solid var(--line);border-radius:8px;background:#fff}
+canvas{width:100%;max-width:500px;image-rendering:pixelated;touch-action:none;cursor:grab;border:1px solid var(--line);border-radius:8px;background:#fff}
 .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 input[type=range]{width:100%;accent-color:var(--acc)}
 input[type=file].plain{width:100%;font-size:14px}
@@ -204,13 +204,18 @@ const char WEB_JS_WALLPAPER[] PROGMEM = R"JS(<script>
 var W=250,H=122,BYTES=3904;
 var file=document.getElementById('img'),cv=document.getElementById('pv'),ctx=cv.getContext('2d');
 var fit=document.getElementById('fit'),dith=document.getElementById('dith'),bri=document.getElementById('bri'),inv=document.getElementById('inv');
+var zoom=document.getElementById('zoom'),rot=document.getElementById('rot'),ctr=document.getElementById('ctr');
 var send=document.getElementById('send'),reset=document.getElementById('reset'),msg=document.getElementById('msg');
-var img=null,bits=null;
+var img=null,bits=null,ox=0,oy=0,z=1,turn=0,ptrs={},drag=null;
+function clampZ(v){return v<1?1:(v>4?4:v);}
+function setZ(v){z=clampZ(v);zoom.value=Math.round(z*100);}
+function home(){ox=0;oy=0;setZ(1);}
 function render(){
 if(!img){ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);bits=null;send.disabled=true;return;}
 var c=document.createElement('canvas');c.width=W;c.height=H;var g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,W,H);
-var s=fit.value==='cover'?Math.max(W/img.width,H/img.height):Math.min(W/img.width,H/img.height);
-var dw=img.width*s,dh=img.height*s;g.drawImage(img,(W-dw)/2,(H-dh)/2,dw,dh);
+var iw=img.width,ih=img.height,rw=turn%2?ih:iw,rh=turn%2?iw:ih;
+var s=(fit.value==='cover'?Math.max(W/rw,H/rh):Math.min(W/rw,H/rh))*z;
+g.save();g.translate(W/2+ox,H/2+oy);g.rotate(turn*Math.PI/2);g.scale(s,s);g.drawImage(img,-iw/2,-ih/2);g.restore();
 var d=g.getImageData(0,0,W,H).data,lum=new Float32Array(W*H),b=parseInt(bri.value,10);
 for(var i=0;i<W*H;i++){var v=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]+b;lum[i]=v<0?0:(v>255?255:v);}
 bits=new Uint8Array(BYTES);var fs=dith.value==='fs';
@@ -220,7 +225,22 @@ var black=nw===0;if(inv.checked)black=!black;if(black)bits[y*32+(x>>3)]|=(0x80>>
 var out=ctx.createImageData(W,H);
 for(var y2=0;y2<H;y2++)for(var x2=0;x2<W;x2++){var bl=(bits[y2*32+(x2>>3)]&(0x80>>(x2&7)))!==0,o=(y2*W+x2)*4,val=bl?0:255;out.data[o]=out.data[o+1]=out.data[o+2]=val;out.data[o+3]=255;}
 ctx.putImageData(out,0,0);send.disabled=false;}
-file.addEventListener('change',function(){var f=file.files[0];if(!f)return;var im=new Image();im.onload=function(){img=im;msg.textContent='';render();};im.src=URL.createObjectURL(f);});
+// przeciaganie (mysz, palec) i szczypanie dwoma palcami; wspolrzedne ekranu -> piksele czytnika
+function k(){return W/cv.getBoundingClientRect().width;}
+function pinch(){var p=Object.keys(ptrs).map(function(i){return ptrs[i];});if(p.length<2)return 0;var dx=p[0].x-p[1].x,dy=p[0].y-p[1].y;return Math.sqrt(dx*dx+dy*dy);}
+cv.addEventListener('pointerdown',function(e){if(!img)return;cv.setPointerCapture(e.pointerId);ptrs[e.pointerId]={x:e.clientX,y:e.clientY};drag={d:pinch(),z:z};e.preventDefault();});
+cv.addEventListener('pointermove',function(e){var p=ptrs[e.pointerId];if(!p||!img)return;var n=Object.keys(ptrs).length;
+if(n===1){ox+=(e.clientX-p.x)*k();oy+=(e.clientY-p.y)*k();}
+p.x=e.clientX;p.y=e.clientY;
+if(n>=2&&drag&&drag.d>0){setZ(drag.z*pinch()/drag.d);}
+render();e.preventDefault();});
+function up(e){delete ptrs[e.pointerId];drag={d:pinch(),z:z};}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('wheel',function(e){if(!img)return;e.preventDefault();setZ(z*Math.exp(-e.deltaY*0.0015));render();},{passive:false});
+zoom.addEventListener('input',function(){z=clampZ(parseInt(zoom.value,10)/100);render();});
+rot.addEventListener('click',function(){turn=(turn+1)%4;home();render();});
+ctr.addEventListener('click',function(){home();render();});
+file.addEventListener('change',function(){var f=file.files[0];if(!f)return;var im=new Image();im.onload=function(){img=im;turn=0;home();msg.textContent='';render();};im.src=URL.createObjectURL(f);});
 [fit,dith,bri,inv].forEach(function(el){el.addEventListener('input',render);});
 send.addEventListener('click',function(){if(!bits)return;send.disabled=true;msg.style.color='';msg.textContent='Sending...';
 var fd=new FormData();fd.append('wp',new Blob([bits],{type:'application/octet-stream'}),'wallpaper.bin');
@@ -245,10 +265,12 @@ const char WEB_WP_BODY[] PROGMEM = R"HTML(<div class="card"><h2>Sleep image</h2>
 <p class="sub">Shown when the reader goes to sleep (Settings &rarr; Sleep screen: Image). Any picture works; it is converted to black &amp; white at 250&times;122 pixels.</p>
 <input id="img" class="plain" type="file" accept="image/*">
 <label class="f">Picture size</label><select id="fit"><option value="cover">Fill the screen (crop)</option><option value="contain">Fit inside (white borders)</option></select>
+<label class="f">Zoom</label><input id="zoom" type="range" min="100" max="400" value="100">
+<div class="row"><button id="rot" class="btn sec" type="button">Rotate 90&deg;</button><button id="ctr" class="btn sec" type="button">Center</button></div>
 <label class="f">Black &amp; white style</label><select id="dith"><option value="fs">Dithered (photos)</option><option value="th">Sharp (drawings, text)</option></select>
 <label class="f">Brightness</label><input id="bri" type="range" min="-80" max="80" value="0">
 <label class="c"><input id="inv" type="checkbox"> Invert colours</label>
-<h3>Preview</h3><canvas id="pv" width="250" height="122"></canvas>
+<h3>Preview</h3><p class="sub">Drag the picture to move it. Pinch, use the mouse wheel or the Zoom slider to make it bigger.</p><canvas id="pv" width="250" height="122"></canvas>
 <div class="row"><button id="send" class="btn" disabled>Send to reader</button><button id="reset" class="btn sec" type="button">Use built-in image</button></div>
 <div id="msg"></div></div>
 )HTML";

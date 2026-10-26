@@ -15,14 +15,14 @@ It turns the board into a small pocket reader: plain-text books and EPUB files (
 - Bookmarks per book (survive font changes), jump to a page or to a chapter
 - Optional status line: percent, page n/N, time left, progress bar, clock, battery (one switch turns all of it off for more text per page)
 - Reading statistics: time, pages, speed, finished books, estimated time left
-- Page turns: full refresh, or fast partial refresh (beta) with a full refresh every N pages
+- Page turns: full refresh, or fast partial refresh with a full refresh every N pages
 
 **Device**
 - Own WiFi hotspot + captive portal; QR codes on screen to join the network and open the page
 - Web interface: upload many books at once (drag & drop), delete books, change every setting, upload a custom sleep image (converted to 1-bit in the browser)
-- Sleep screen: book card / your own image / keep current screen; auto sleep after 1–30 min; wake with the encoder button
+- Sleep screen: book info / your own image (move, zoom and rotate it in the browser) / current page; auto sleep after 1–30 min; wake with the encoder button
 - Clock set from your phone each time you open the web page (time zones with daylight saving)
-- Battery estimate (the board has no battery sensor): based on time awake / asleep and screen refreshes, started from a voltage you enter, with a downloadable log; experimental power saving (80 MHz, light sleep)
+- Battery estimate (the board has no battery sensor): based on time awake / asleep and screen refreshes, started from a voltage you enter, with a downloadable log; power saving with light sleep (below 1 mA on a static page)
 - Fast, flash-free refresh when moving through menus (can be switched to full refresh)
 
 ## Quick start

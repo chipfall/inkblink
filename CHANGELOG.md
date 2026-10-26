@@ -2,6 +2,22 @@
 
 Versions are `MAJOR.MINOR.PATCH`. During 0.9.x every update package bumps the patch number (`0.9.8` = update 8), so the Info screen always shows which package is installed. A version that has been tested on the device gets a git tag (see `docs/DEVELOPMENT.md`). The newest section must match `FW_VERSION` in `firmware/inkblink/inkblink.ino` (checked by `make -C tests test`).
 
+## 0.9.12
+
+- Waking up returns to where the reader fell asleep: in a book back to the book, anywhere else to the main menu. After a power-on *Open last book* works as before
+- *Menu font*: Helvetica 12 (default) or Classic; Unifont removed from the menu fonts (it stays as a book font). A saved Unifont setting becomes Helvetica 12
+- Power & system: *Sleep time* (was *Sleep*), *Cover* (was *On sleep*); web page: *Cover (sleep screen)*
+- Status line: without a battery reading the item shows *Battery: Off* and cannot be changed (was *Battery: estimate off*)
+
+## 0.9.11
+
+- Sleep image page: drag the picture to move it, zoom with a slider, pinch or the mouse wheel, *Rotate 90°* and *Center* buttons
+- Hidden **Developer** menu: hold MENU for 10 s in the main menu to show it (below Info); the same again hides it. It holds *Hotspot power*, *Power saving* and the battery pin test; on the web settings page these two options appear only in developer mode
+- Defaults after the tests: *Power saving* = Light, *Hotspot power* = Medium. The update sets both once, because they are no longer in the normal settings
+- Info: the PINS button was removed (the pin test is in the Developer menu)
+- Names: *Page flip: Fast* (no "beta"), *On sleep: Book info / Image / Current page* (was *Sleep screen: Book / Image / Keep*)
+- In the main menu a long MENU press puts the reader to sleep when the key is released (it waits, because holding it 10 s toggles developer mode)
+
 ## 0.9.10
 
 - Fix: the QR codes on the Upload screen could not be scanned on the device. The Arduino `bit()` macro replaced a helper of the same name in the QR encoder, so all format bits were drawn dark (the code was fine in the PC tests, which now define the same macro and check the format bits)

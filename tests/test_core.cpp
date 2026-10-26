@@ -114,7 +114,7 @@ int main(){
   SECTION("T7 strona WWW: angielski, nowe pola, zapis");
   { auto ascii=[&](const std::string& s){ for(unsigned char c: s) if(c>127) return false; return true; };
     g_args.clear(); g_lastBody.clear(); handleConfigGet(); CHECK(g_lastCode==200);
-    for(const char* w: {"Text margins","Reading","Status line","Display","Power","Sleep screen","Estimated time left","Battery in the book","Page flip","Save settings","name='bat'","name='flip'","name='fullev'","name='sscr'","Helvetica 12 px","Unifont 16 px","Classic 16 px"}) CHECK(g_lastBody.find(w)!=std::string::npos);
+    for(const char* w: {"Text margins","Reading","Status line","Display","Power","Cover (sleep screen)","Estimated time left","Battery in the book","Page flip","Save settings","name='bat'","name='flip'","name='fullev'","name='sscr'","Helvetica 12 px","Unifont 16 px","Classic 16 px"}) CHECK(g_lastBody.find(w)!=std::string::npos);
     CHECK(ascii(g_lastBody)); CHECK(g_lastBody.find("lang=\"en\"")!=std::string::npos); CHECK(g_lastBody.find("Settings saved")==std::string::npos);
     for(const char* pl: {"Ustawienia","Zapisz","Czcionka","Ksiazki","Wyslij"}) CHECK(g_lastBody.find(pl)==std::string::npos);
     g_args["ok"]="1"; g_lastBody.clear(); handleConfigGet(); CHECK(g_lastBody.find("Settings saved")!=std::string::npos); g_args.clear();
@@ -198,7 +198,7 @@ int main(){
     onKeySettings(ok); CHECK(statusAnyOn() && statusVisible() && cfg.showPct && cfg.showPage && cfg.showLeft && cfg.showBar && cfg.clockBook && cfg.batMode==1 && linesPerPage==lpOn);
     for(int i=1;i<=5;i++) CHECK(strstr(settingsItem(i),"ON")!=nullptr); printf("  Status line ON: wszystkie podopcje ON\n");
     setSel=2; onKeySettings(ok); CHECK(!cfg.showPage && statusAnyOn() && strstr(settingsItem(0),"ON")!=nullptr); onKeySettings(ok);             // pojedyncza podopcja nie wylacza glownego
-    CHECK(strstr(settingsItem(6),"pin not set")!=nullptr); setSel=6; onKeySettings(ok); CHECK(cfg.batMode==2); onKeySettings(ok); CHECK(cfg.batMode==0); onKeySettings(ok); CHECK(cfg.batMode==1);
+    CHECK(!batteryAvailable() && strcmp(settingsItem(6),"Battery: Off")==0); setSel=6; onKeySettings(ok); CHECK(cfg.batMode==1); onKeySettings(ok); CHECK(cfg.batMode==1); printf("  bez pomiaru baterii: 'Battery: Off', OK nic nie zmienia\n");
     onKeySettings(bk); CHECK(setGroup==-1 && setSel==1);                                              // wraca na te sama grupe
     setSel=2; onKeySettings(ok); CHECK(setGroup==2);                                                  // Clock
     setSel=0; onKeySettings(ok); CHECK(cfg.clockMode==1 && strstr(settingsItem(0),"24h")!=nullptr); onKeySettings(ok); CHECK(cfg.clockMode==2 && strstr(settingsItem(0),"12h")!=nullptr); onKeySettings(ok); CHECK(cfg.clockMode==0);
@@ -208,11 +208,20 @@ int main(){
     setSel=0; onKeySettings(ok); CHECK(cfg.sleepIdx==2); setSel=1; onKeySettings(ok); CHECK(cfg.sleepScreen==1); onKeySettings(ok); onKeySettings(ok); CHECK(cfg.sleepScreen==0);
     setSel=2; onKeySettings(ok); CHECK(cfg.fastFlip && strstr(settingsItem(2),"Fast")!=nullptr); onKeySettings(ok); CHECK(!cfg.fastFlip);
     setSel=3; onKeySettings(ok); CHECK(cfg.fastMenu && strstr(settingsItem(3),"Fast")!=nullptr); onKeySettings(ok); CHECK(!cfg.fastMenu && strstr(settingsItem(3),"Full")!=nullptr); onKeySettings(ok); CHECK(cfg.fastMenu);
-    setSel=4; onKeySettings(ok); CHECK(cfg.uiFont==2 && strstr(settingsItem(4),"Helv 12")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==3 && strstr(settingsItem(4),"Unifont")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==0 && strstr(settingsItem(4),"Classic")!=nullptr);
+    setSel=4; onKeySettings(ok); CHECK(cfg.uiFont==2 && strstr(settingsItem(4),"Helv 12")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==0 && strstr(settingsItem(4),"Classic")!=nullptr); onKeySettings(ok); CHECK(cfg.uiFont==2); cfg.uiFont=3; applyLayout(); CHECK(cfg.uiFont==2); cfg.uiFont=0; printf("  Menu font: Helv 12 <-> Classic, dawny Unifont -> Helv 12\n");
     setSel=5; onKeySettings(ok); CHECK(cfg.fullEvery==2); onKeySettings(ok); CHECK(cfg.fullEvery==0);
-    setSel=7; onKeySettings(ok); CHECK(cfg.apPower==1 && strstr(settingsItem(7),"Medium")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==2 && strstr(settingsItem(7),"High")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==0 && strstr(settingsItem(7),"Low")!=nullptr);
-    setSel=8; onKeySettings(ok); CHECK(cfg.powerSave==1 && strstr(settingsItem(8),"CPU 80")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==2 && strstr(settingsItem(8),"Light")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==0 && strstr(settingsItem(8),"Off")!=nullptr);
-    setSel=9; onKeySettings(ok); CHECK(strncmp(settingsItem(9),"Hotspot: ",9)==0);
+    CHECK(settingsCount()==8); for(int i=0;i<8;i++) CHECK(!strstr(settingsItem(i),"power")); printf("  Power & system: 8 pozycji, bez Hotspot power / Power saving\n");
+    setSel=1; CHECK(strcmp(settingsItem(1),"Cover: Book info")==0); cfg.sleepScreen=2; CHECK(strcmp(settingsItem(1),"Cover: Current page")==0 && strlen(settingsItem(1))<=UI_CHARS-2); cfg.sleepScreen=0; CHECK(strncmp(settingsItem(0),"Sleep time: ",12)==0);
+    setSel=7; onKeySettings(ok); CHECK(strncmp(settingsItem(7),"Hotspot: ",9)==0);
+    { int sg=setGroup; goDeveloper(); CHECK(screen==S_SETTINGS && setGroup==SET_DEV && settingsCount()==3);
+      cfg.apPower=0; cfg.powerSave=0;
+      setSel=0; onKeySettings(ok); CHECK(cfg.apPower==1 && strstr(settingsItem(0),"Medium")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==2 && strstr(settingsItem(0),"High")!=nullptr); onKeySettings(ok); CHECK(cfg.apPower==0 && strstr(settingsItem(0),"Low")!=nullptr);
+      setSel=1; onKeySettings(ok); CHECK(cfg.powerSave==1 && strstr(settingsItem(1),"CPU 80")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==2 && strstr(settingsItem(1),"Light")!=nullptr); onKeySettings(ok); CHECK(cfg.powerSave==0 && strstr(settingsItem(1),"Off")!=nullptr);
+      cfg.powerSave=2; cfg.apPower=1; powerApply();
+      setSel=2; onKeySettings(ok); CHECK(screen==S_PINSCAN);
+      KeyEvent bkx{KEY_BACK,EV_SHORT,0}; onKeySettings(bkx); 
+      printf("  Developer: Hotspot power, Power saving, test pinu\n");
+      goSettings(); setSel=3; onKeySettings(ok); CHECK(setGroup==3); (void)sg; }
     setSel=settingsCount()-1; onKeySettings(dn); CHECK(setSel==0); onKeySettings(up); CHECK(setSel==settingsCount()-1);
     KeyEvent hm{KEY_HOME,EV_SHORT,0}; onKeySettings(hm); CHECK(screen==S_SETTINGS && setGroup==3); printf("  HOME w ustawieniach nic nie robi\n");
     onKeySettings(bk); CHECK(setGroup==-1); onKeySettings(bk); CHECK(screen==S_MENU); CHECK(prefs.u["cfg_bd"]==1 && prefs.u["cfg_cb"]==1); printf("  BACK: z grupy na liste, z listy do menu; ustawienia zapisane\n");
@@ -234,7 +243,7 @@ int main(){
       {"library",[&]{ libSel=1; goLibrary(); },false,true,true},
       {"settings",[&]{ setSel=2; goSettings(); },false,true,true},
       {"goto",[&]{ cfg=Settings{FAM_CLASSIC,1,false,true,true,true,1,true}; applyLayout(); openBook("Polska_ksiazka.txt"); gotoVal=1; gotoStepIdx=1; goGoto(); },true,true,true},
-      {"info",[&]{ goInfo(); },false,true,true},
+      {"info",[&]{ goInfo(); },false,false,true},
       {"stats",[&]{ goStats(); },false,false,true},
       {"pinscan",[&]{ goPinScan(); },false,false,true},
       {"upload",[&]{ lastUploaded[0]=0; strcpy(lastUploaded,"Wiedzmin_-_Ostatnie_zyczenie.txt"); goUpload(); },false,true,true},
@@ -249,7 +258,14 @@ int main(){
   SECTION("T14 klawisze bez podpisu sa nieaktywne (przez prawdziwe loop())");
   { auto press=[&](int pin,unsigned long ms){ g_holds={{pin,0,ms}}; g_t0=g_ms; g_readHook=simRead; unsigned long end=g_t0+ms+500; while(g_ms<end){ loop(); g_ms+=5; } g_readHook=nullptr; for(int i=0;i<64;i++) g_pin[i]=1; g_ms+=300; };
     cfg=Settings{FAM_CLASSIC,1,false,true,true,true,1,true}; applyLayout();
-    goInfo(); press(PIN_KEY_HOME,150); CHECK(screen==S_INFO); press(PIN_KEY_OK,150); CHECK(screen==S_PINSCAN); press(PIN_KEY_BACK,150); CHECK(screen==S_INFO); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Info: HOME nic, OK = test pinow, EXIT wraca\n");
+    goInfo(); press(PIN_KEY_HOME,150); CHECK(screen==S_INFO); press(PIN_KEY_OK,150); CHECK(screen==S_INFO); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Info: HOME i OK nic, EXIT wraca\n");
+    goDeveloper(); setSel=2; press(PIN_KEY_OK,150); CHECK(screen==S_PINSCAN); press(PIN_KEY_BACK,150); CHECK(screen==S_SETTINGS && setGroup==SET_DEV); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Developer: OK na tescie pinow, EXIT wraca do Developer, potem do menu\n");
+    { devMode=false; goMenu(); int n0=menuCount; g_slept=false;
+      press(PIN_KEY_HOME,10500); CHECK(devMode && !g_slept && menuCount==n0+1 && strcmp(menuLabels[menuCount-1],"Developer")==0 && prefs.getBool("dev_on",false));
+      menuSel=menuCount-1; press(PIN_KEY_OK,150); CHECK(screen==S_SETTINGS && setGroup==SET_DEV); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU);
+      press(PIN_KEY_HOME,10500); CHECK(!devMode && !g_slept && menuCount==n0 && !prefs.getBool("dev_on",true));
+      press(PIN_KEY_HOME,9000); CHECK(!devMode && g_slept); g_slept=false;
+      printf("  menu: MENU 10 s wlacza/wylacza Developer, krocej (9 s) usypia po puszczeniu\n"); goMenu(); }
     goStats(); press(PIN_KEY_HOME,150); CHECK(screen==S_STATS); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Stats: HOME nic, EXIT wraca\n");
     goLibrary(); press(PIN_KEY_HOME,150); CHECK(screen==S_LIBRARY); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Biblioteka: HOME nic, EXIT wraca\n");
     goSettings(); press(PIN_KEY_HOME,150); CHECK(screen==S_SETTINGS); press(PIN_KEY_BACK,150); CHECK(screen==S_MENU); printf("  Ustawienia: HOME nic, EXIT wraca\n");
@@ -258,6 +274,14 @@ int main(){
     openBook("Polska_ksiazka.txt"); screen=S_READER; showPage(false); press(PIN_KEY_HOME,150); CHECK(screen==S_MENU); openBook("Polska_ksiazka.txt"); screen=S_READER; showPage(false); press(PIN_KEY_BACK,150); CHECK(screen==S_LIBRARY); printf("  Czytnik: HOME -> menu, EXIT -> biblioteka\n"); closeBook(); }
 
   SECTION("T15 hotspot: licznik telefonow i zadan, rzadkie odswiezanie");
+  { // wybudzenie: zasnal w ksiazce -> ksiazka, poza nia -> menu; wlaczenie zasilania -> ksiazka (Open last book)
+    extern uint8_t sleptInBook; extern int g_wakeCause;
+    prefs.putString("last","maly.txt"); cfg.autoOpen=true; saveSettings();
+    g_wakeCause=2; sleptInBook=0; setup(); CHECK(screen==S_MENU);
+    g_wakeCause=2; sleptInBook=1; setup(); CHECK(screen==S_READER); closeBook();
+    g_wakeCause=0; sleptInBook=0; setup(); CHECK(screen==S_READER); closeBook();
+    goMenu(); g_slept=false; goSleep(); CHECK(g_slept && sleptInBook==0); CHECK(openBook("maly.txt")); screen=S_READER; goSleep(); CHECK(sleptInBook==1); closeBook(); g_slept=false; g_wakeCause=0; sleptInBook=1;
+    LittleFS.begin(false); printf("  wybudzenie: z menu -> menu, z ksiazki -> ksiazka, zasilanie -> ksiazka\n"); }
   { g_apFail=false; g_stations=0; g_onEventCalls=0; setup(); CHECK(g_onEventCalls==1); closeBook(); goUpload(); CHECK(screen==S_UPLOAD && httpHits==0);
     unsigned long d0=lastUploadDraw; g_stations=1; WiFiEventInfo_t inf; statusDirty=false; onWifiEvent(ARDUINO_EVENT_WIFI_AP_STACONNECTED,inf); CHECK(statusDirty);
     g_ms+=1000; loop(); CHECK(lastUploadDraw==d0); printf("  zmiana tuz po rysowaniu: bez odswiezenia (limit 4 s)\n");

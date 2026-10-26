@@ -44,7 +44,7 @@
 #include "reader_fonts.h"       // czcionki ksiazki
 #include "webui_assets.h"       // strona WWW (HTML/CSS/JS)
 
-#define FW_VERSION "0.9.10"         // 0.9.N = paczka/update N (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
+#define FW_VERSION "0.9.12"         // 0.9.N = paczka/update N (patrz docs/DEVELOPMENT.md); musi zgadzac sie z CHANGELOG.md
 
 // ---------- Ustawienia ekranu / interfejsu ----------
 #define FONT_SIZE 16            // czcionka interfejsu (menu, komunikaty)
@@ -126,7 +126,7 @@ struct Settings {
   bool fastFlip;       // szybkie przewracanie stron (eksperyment)
   uint8_t fullEvery;   // indeks w fullEveryVals
   uint8_t sleepIdx;    // indeks w sleepMinutes
-  uint8_t sleepScreen; // ekran uspienia: 0 karta ksiazki, 1 obraz, 2 bez zmian
+  uint8_t sleepScreen; // ekran uspienia: 0 karta ksiazki (Book info), 1 obraz, 2 biezaca strona
   bool autoOpen;       // po starcie otworz ostatnia ksiazke
   uint8_t margin;      // margines tekstu: 0 normalny, 1 waski, 2 szeroki (marginVals)
   uint8_t lineGap;     // interlinia: indeks w lineGapVals
@@ -135,13 +135,14 @@ struct Settings {
   bool clockBook;      // zegar w pasku stanu w ksiazce
   uint8_t tz;          // strefa czasowa (indeks w TZS)
   bool fastMenu;       // szybkie (bez migania) odswiezanie list w menu
-  uint8_t uiFont;      // czcionka menu i naglowkow: 0 Classic, 2 Helvetica 12, 3 Unifont (1 = dawne Helvetica 14, traktowane jak 2)
+  uint8_t uiFont;      // czcionka menu i naglowkow: 0 Classic, 2 Helvetica 12 (1 = dawne Helvetica 14 i 3 = dawny Unifont, traktowane jak 2)
   uint8_t apPower;     // moc nadawania hotspotu: 0 niska (8,5 dBm), 1 srednia (13 dBm), 2 wysoka (19,5 dBm)
   uint8_t powerSave;   // oszczedzanie energii: 0 wylaczone, 1 procesor 80 MHz, 2 lekkie uspienie w bezczynnosci
   bool battEst;        // szacowanie baterii (plytka nie ma czujnika)
   uint8_t battCap;     // pojemnosc ogniwa: indeks w BM_CAPS
 };
-Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 2, 1, 0, true, 2 };
+Settings cfg = { FAM_CLASSIC, 1, false, true, true, false, true, 1, false, 1, 1, 0, true, 0, 0, true, 0, false, 0, true, 2, 1, 2, true, 2 };
+bool devMode = false;    // ukryte opcje (Developer): wlaczane przytrzymaniem MENU przez 10 s w menu glownym
 
 // Czy pasek stanu w ogole jest rysowany (wplywa na uklad strony, wiec bateria go nie zmienia)
 // Czy wlaczona jest choc jedna pozycja paska stanu (glowny przelacznik "Status line" pokazuje ten stan)
@@ -170,7 +171,7 @@ void applyLayout() {
   if (cfg.lineGap > 2) cfg.lineGap = 0;
   if (cfg.clockMode > 2) cfg.clockMode = 0;
   if (cfg.tz >= TZ_COUNT) cfg.tz = 0;
-  if (cfg.uiFont == 1) cfg.uiFont = 2;            // dawne Helvetica 14 (zbyt ciasne w wierszach menu)
+  if (cfg.uiFont == 1 || cfg.uiFont == 3) cfg.uiFont = 2;   // dawne Helvetica 14 (zbyt ciasne) i Unifont (usuniety)
   if (cfg.uiFont > 3) cfg.uiFont = 0;
   if (cfg.apPower > 2) cfg.apPower = 1;
   if (cfg.powerSave > 2) cfg.powerSave = 0;
@@ -506,9 +507,9 @@ String apPassword() {
 }
 
 // ---------- Menu ----------
-enum MenuId { M_CONTINUE, M_LIBRARY, M_UPLOAD, M_STATS, M_SETTINGS, M_INFO };
-MenuId menuIds[6];
-const char* menuLabels[6];
+enum MenuId { M_CONTINUE, M_LIBRARY, M_UPLOAD, M_STATS, M_SETTINGS, M_INFO, M_DEV };
+MenuId menuIds[7];
+const char* menuLabels[7];
 int menuCount = 0;
 int menuSel = 0;
 
@@ -567,6 +568,8 @@ size_t wpBytes = 0;
 volatile bool statusDirty = false;     // cos sie zmienilo: odswiez licznik na ekranie
 int httpHits = 0;                      // ile zadan HTTP dotarlo do czytnika
 unsigned long lastUploadDraw = 0;
+#define DEV_HOLD_MS 10000UL               // tyle trzeba trzymac MENU w menu glownym (tryb Developer)
+unsigned long devHoldMs = 0;              // != 0: MENU trzymane od tej chwili (menu glowne)
 
 // ============================================================
 //  Ekrany pomocnicze
@@ -1814,6 +1817,16 @@ void loadSettings() {
   if (cfg.batMode > 2) cfg.batMode = 1;
   if (cfg.fullEvery > 2) cfg.fullEvery = 1;
   if (cfg.sleepScreen > 2) cfg.sleepScreen = 0;
+  devMode = prefs.getBool("dev_on", false);
+  // 0.9.11: Hotspot power i Power saving przeniesione do ukrytego menu Developer. Jednorazowo
+  // ustawiamy sprawdzone wartosci, zeby nikt nie zostal z niewidocznym gorszym ustawieniem.
+  if (prefs.getUChar("cfg_ver", 0) < 2) {
+    cfg.apPower = 1;                 // Medium
+    cfg.powerSave = 2;               // Light
+    prefs.putUChar("cfg_ap", cfg.apPower);
+    prefs.putUChar("cfg_ps", cfg.powerSave);
+    prefs.putUChar("cfg_ver", 2);
+  }
   applyLayout();                 // poprawia tez nieprawidlowe indeksy czcionki
   clockApplyTz(cfg.tz);
 }
@@ -1851,15 +1864,16 @@ const char* onOff(bool b) {
 }
 
 // Ustawienia sa podzielone na grupy (menu dwupoziomowe)
-#define SET_GROUPS 5
-static const char* const SET_GROUP_NAMES[SET_GROUPS] = { "Reading", "Status line", "Clock", "Power & system", "Battery" };
-static const uint8_t SET_GROUP_ITEMS[SET_GROUPS] = { 6, 7, 3, 10, 5 };
+#define SET_GROUPS 5               // grupy widoczne na liscie Settings
+#define SET_DEV 5                  // ukryta grupa Developer (wejscie z menu glownego w trybie Developer)
+static const char* const SET_GROUP_NAMES[SET_GROUPS + 1] = { "Reading", "Status line", "Clock", "Power & system", "Battery", "Developer" };
+static const uint8_t SET_GROUP_ITEMS[SET_GROUPS + 1] = { 6, 7, 3, 8, 5, 3 };
 
 // Teksty pozycji maja co najwyzej UI_CHARS - 2 znakow (przed nimi jest "> ")
 const char* groupItem(int g, int i) {
   static char b[UI_CHARS + 1];
   static const char* const batNames[3] = { "Off", "Low", "Always" };
-  static const char* const sleepNames[3] = { "Book", "Image", "Keep" };
+  static const char* const sleepNames[3] = { "Book info", "Image", "Current page" };
   static const char* const marginNames[3] = { "Normal", "Narrow", "Wide" };
   static const char* const gapNames[3] = { "Normal", "Relaxed", "Loose" };
   static const char* const clockNames[3] = { "Off", "24h", "12h" };
@@ -1882,7 +1896,7 @@ const char* groupItem(int g, int i) {
       case 4: snprintf(b, sizeof(b), "Progress bar: %s", onOff(cfg.showBar)); break;
       case 5: snprintf(b, sizeof(b), "Clock in book: %s", onOff(cfg.clockBook)); break;
       default:
-        if (!batteryAvailable()) snprintf(b, sizeof(b), "Battery: pin not set");   // patrz Info -> PINS
+        if (!batteryAvailable()) snprintf(b, sizeof(b), "Battery: Off");   // brak pomiaru: wlacz Settings -> Battery -> Estimate
         else snprintf(b, sizeof(b), "Battery: %s", batNames[cfg.batMode % 3]);
         break;
     }
@@ -1899,11 +1913,11 @@ const char* groupItem(int g, int i) {
   } else if (g == 3) {
     switch (i) {
       case 0:
-        if (sleepMinutes[cfg.sleepIdx] == 0) snprintf(b, sizeof(b), "Sleep: never");
-        else snprintf(b, sizeof(b), "Sleep: %d min", sleepMinutes[cfg.sleepIdx]);
+        if (sleepMinutes[cfg.sleepIdx] == 0) snprintf(b, sizeof(b), "Sleep time: Never");
+        else snprintf(b, sizeof(b), "Sleep time: %d min", sleepMinutes[cfg.sleepIdx]);
         break;
-      case 1: snprintf(b, sizeof(b), "Sleep screen: %s", sleepNames[cfg.sleepScreen % 3]); break;
-      case 2: snprintf(b, sizeof(b), "Page flip: %s", cfg.fastFlip ? "Fast beta" : "Full"); break;
+      case 1: snprintf(b, sizeof(b), "Cover: %s", sleepNames[cfg.sleepScreen % 3]); break;
+      case 2: snprintf(b, sizeof(b), "Page flip: %s", cfg.fastFlip ? "Fast" : "Full"); break;
       case 3: snprintf(b, sizeof(b), "Menu flip: %s", cfg.fastMenu ? "Fast" : "Full"); break;
       case 4: {
         static const char* const uiNames[4] = { "Classic", "Helv 14", "Helv 12", "Unifont" };
@@ -1912,17 +1926,21 @@ const char* groupItem(int g, int i) {
       }
       case 5: snprintf(b, sizeof(b), "Full every: %d pages", fullEveryVals[cfg.fullEvery % 3]); break;
       case 6: snprintf(b, sizeof(b), "Open last book: %s", onOff(cfg.autoOpen)); break;
-      case 7: {
+      default: snprintf(b, sizeof(b), "Hotspot: %s", apPassword().c_str()); break;
+    }
+  } else if (g == SET_DEV) {
+    switch (i) {
+      case 0: {
         static const char* const apNames[3] = { "Low", "Medium", "High" };
         snprintf(b, sizeof(b), "Hotspot power: %s", apNames[cfg.apPower % 3]);
         break;
       }
-      case 8: {
+      case 1: {
         static const char* const psNames[3] = { "Off", "CPU 80", "Light" };
         snprintf(b, sizeof(b), "Power saving: %s", psNames[cfg.powerSave % 3]);
         break;
       }
-      default: snprintf(b, sizeof(b), "Hotspot: %s", apPassword().c_str()); break;
+      default: snprintf(b, sizeof(b), "Battery pin test"); break;
     }
   } else {
     switch (i) {
@@ -1949,6 +1967,7 @@ int settingsCount() {
 
 void goSetTime();                      // (ponizej, po ustawieniach)
 void goSetBatt();
+void goPinScan();
 bool settingsFromReader = false;       // wejscie skrotem z ksiazki (dlugie BACK): BACK wraca do ksiazki
 char settingsResumeBook[NAME_LEN];
 
@@ -1957,6 +1976,14 @@ void drawSettings() {
   else drawList(SET_GROUP_NAMES[setGroup], settingsItem, SET_GROUP_ITEMS[setGroup], setSel,
                 (settingsFromReader && setGroup <= 1) ? (setGroup == 0 ? "STATUS" : "TEXT") : "", "CHANGE",
                 settingsFromReader ? "BOOK" : "BACK");
+}
+
+void goDeveloper() {
+  screen = S_SETTINGS;
+  settingsFromReader = false;
+  setGroup = SET_DEV;
+  setSel = 0;
+  drawSettings();
 }
 
 void goSettings() {
@@ -1988,7 +2015,7 @@ void groupChange(int g, int i) {
       case 3: cfg.showLeft = !cfg.showLeft; break;
       case 4: cfg.showBar = !cfg.showBar; break;
       case 5: cfg.clockBook = !cfg.clockBook; break;
-      default: cfg.batMode = (cfg.batMode + 1) % 3; break;
+      default: if (batteryAvailable()) cfg.batMode = (cfg.batMode + 1) % 3; break;   // bez pomiaru nie ma czego pokazac
     }
   } else if (g == 2) {
     switch (i) {
@@ -2005,15 +2032,19 @@ void groupChange(int g, int i) {
       case 1: cfg.sleepScreen = (cfg.sleepScreen + 1) % 3; break;
       case 2: cfg.fastFlip = !cfg.fastFlip; break;
       case 3: cfg.fastMenu = !cfg.fastMenu; break;
-      case 4: cfg.uiFont = (cfg.uiFont == 0) ? 2 : (cfg.uiFont == 2) ? 3 : 0; break;      // Classic -> Helvetica 12 -> Unifont
+      case 4: cfg.uiFont = (cfg.uiFont == 2) ? 0 : 2; break;      // Helvetica 12 <-> Classic
       case 5: cfg.fullEvery = (cfg.fullEvery + 1) % 3; break;
       case 6: cfg.autoOpen = !cfg.autoOpen; break;
-      case 7: cfg.apPower = (cfg.apPower + 1) % 3; break;
-      case 8:
+      default: apPasswordNew(); break;       // nowe haslo hotspotu
+    }
+  } else if (g == SET_DEV) {
+    switch (i) {
+      case 0: cfg.apPower = (cfg.apPower + 1) % 3; break;
+      case 1:
         cfg.powerSave = (cfg.powerSave + 1) % 3;
         powerApply();
         break;
-      default: apPasswordNew(); break;       // nowe haslo hotspotu
+      default: break;                        // 2: test pinow (otwierany w onKeySettings)
     }
   } else {
     switch (i) {
@@ -2050,6 +2081,9 @@ void onKeySettings(const KeyEvent& e) {
     } else if (setGroup == 4 && setSel == 2) {
       goSetBatt();                           // reczne wpisanie napiecia baterii
       return;
+    } else if (setGroup == SET_DEV && setSel == 2) {
+      goPinScan();                           // szukanie pinu baterii (po przerobce plytki)
+      return;
     } else {
       groupChange(setGroup, setSel);
       applyLayout();
@@ -2068,7 +2102,10 @@ void onKeySettings(const KeyEvent& e) {
       goReader(settingsResumeBook);
       return;
     }
-    if (setGroup >= 0) {                     // z grupy wracamy na liste grup
+    if (setGroup == SET_DEV) {               // Developer otwierany z menu glownego: tam wracamy
+      setGroup = -1;
+      goMenu();
+    } else if (setGroup >= 0) {              // z grupy wracamy na liste grup
       setGroup = -1;
       setSel = setTopSel;
       drawSettings();
@@ -2283,6 +2320,10 @@ void buildMenu() {
   menuLabels[menuCount++] = "Settings";
   menuIds[menuCount] = M_INFO;
   menuLabels[menuCount++] = "Info";
+  if (devMode) {
+    menuIds[menuCount] = M_DEV;
+    menuLabels[menuCount++] = "Developer";
+  }
 
   if (menuSel >= menuCount) menuSel = 0;
 }
@@ -2325,7 +2366,7 @@ void goInfo() {
   gfxText(UI_X, 58, l4, FONT_SIZE);
   gfxText(UI_X, 76, BOARD_NAME, FONT_SIZE);
   gfxText(UI_X, 94, "InkBlink v" FW_VERSION, FONT_SIZE);
-  drawLegend("", batteryAvailable() ? "" : "PINS", "BACK", false);   // PINS: szukanie pinu baterii
+  drawLegend("", "", "BACK", false);
   gfxPresent();
   screen = S_INFO;
 }
@@ -2647,7 +2688,7 @@ void handleConfigGet() {
   optTag(h, 0, "Hidden", cfg.batMode == 0);
   optTag(h, 1, "Only when low", cfg.batMode == 1);
   optTag(h, 2, "Always", cfg.batMode == 2);
-  h += "</select><p class='note'>Needs the battery pin set in the firmware (see Info &rarr; PINS on the reader).</p></div>";
+  h += "</select><p class='note'>Uses the battery estimate (Battery card below).</p></div>";
   server.sendContent(h);
 
   h = "<div class='card'><h2>Clock</h2><p class='sub'>The reader has no clock battery: it takes the time from this device every time you open this page. Time survives sleep, not a full power-off.</p>"
@@ -2686,10 +2727,10 @@ void handleConfigGet() {
   h += "<p class='note'>Applied when you save. Every setting is logged together with the counters, so the estimate can be refined later.</p></div>";
   server.sendContent(h);
 
-  h = "<div class='card'><h2>Display</h2><p class='sub'>Fast page flip skips the black flash but is experimental.</p>"
+  h = "<div class='card'><h2>Display</h2><p class='sub'>Fast page flip skips the black flash; a full refresh every few pages removes ghost images.</p>"
       "<label class='f'>Page flip</label><select name='flip'>";
   optTag(h, 0, "Full refresh (flashes, cleanest)", !cfg.fastFlip);
-  optTag(h, 1, "Fast (beta, no flash)", cfg.fastFlip);
+  optTag(h, 1, "Fast (no flash)", cfg.fastFlip);
   h += "</select><label class='f'>Full refresh every</label><select name='fullev'>";
   for (int i = 0; i < 3; i++) {
     char lab[24];
@@ -2702,17 +2743,20 @@ void handleConfigGet() {
   optTag(h, 0, "Full refresh", !cfg.fastMenu);
   h += "</select><label class='f'>Menu font</label><select name='uifont'>";
   optTag(h, 2, "Helvetica 12 (thin)", cfg.uiFont == 2);
-  optTag(h, 3, "Unifont (pixel, wide)", cfg.uiFont == 3);
   optTag(h, 0, "Classic (pixel, old)", cfg.uiFont == 0);
-  h += "</select><label class='f'>Hotspot power</label><select name='appower'>";
-  optTag(h, 0, "Low (best when the phone or PC is next to the reader)", cfg.apPower == 0);
-  optTag(h, 1, "Medium", cfg.apPower == 1);
-  optTag(h, 2, "High (longer range, needs a strong power source)", cfg.apPower == 2);
-  h += "</select><label class='f'>Power saving (experimental)</label><select name='psave'>";
-  optTag(h, 0, "Off (processor 240 MHz)", cfg.powerSave == 0);
-  optTag(h, 1, "Processor 80 MHz", cfg.powerSave == 1);
-  optTag(h, 2, "80 MHz + light sleep when idle", cfg.powerSave == 2);
-  h += "</select></div>";
+  h += "</select>";
+  if (devMode) {                           // ukryte opcje: tylko w trybie Developer
+    h += "<label class='f'>Hotspot power (developer)</label><select name='appower'>";
+    optTag(h, 0, "Low (best when the phone or PC is next to the reader)", cfg.apPower == 0);
+    optTag(h, 1, "Medium (default)", cfg.apPower == 1);
+    optTag(h, 2, "High (longer range, needs a strong power source)", cfg.apPower == 2);
+    h += "</select><label class='f'>Power saving (developer)</label><select name='psave'>";
+    optTag(h, 0, "Off (processor 240 MHz)", cfg.powerSave == 0);
+    optTag(h, 1, "Processor 80 MHz", cfg.powerSave == 1);
+    optTag(h, 2, "80 MHz + light sleep when idle (default)", cfg.powerSave == 2);
+    h += "</select>";
+  }
+  h += "</div>";
   server.sendContent(h);
 
   h = "<div class='card'><h2>Power</h2>"
@@ -2723,10 +2767,10 @@ void handleConfigGet() {
     else snprintf(lab, sizeof(lab), "%d min", sleepMinutes[i]);
     optTag(h, i, lab, cfg.sleepIdx == i);
   }
-  h += "</select><label class='f'>Sleep screen</label><select name='sscr'>";
-  optTag(h, 0, "Book card (title, progress)", cfg.sleepScreen == 0);
+  h += "</select><label class='f'>Cover (sleep screen)</label><select name='sscr'>";
+  optTag(h, 0, "Book info (title, progress)", cfg.sleepScreen == 0);
   optTag(h, 1, "Sleep image", cfg.sleepScreen == 1);
-  optTag(h, 2, "Keep the last page", cfg.sleepScreen == 2);
+  optTag(h, 2, "Current page (leave the screen as it is)", cfg.sleepScreen == 2);
   h += "</select>";
   checkTag(h, "ao", "Open the last book on start", cfg.autoOpen);
   h += "</div><p><button class='btn'>Save settings</button></p></form>";
@@ -2791,7 +2835,7 @@ void handleConfigPost() {
   }
   if (server.hasArg("uifont")) {
     int uf = server.arg("uifont").toInt();
-    if (uf == 1) uf = 2;                    // dawne Helvetica 14
+    if (uf == 1 || uf == 3) uf = 2;         // dawne Helvetica 14 i Unifont
     if (uf >= 0 && uf <= 3) cfg.uiFont = uf;
   }
   int fe = server.arg("fullev").toInt();
@@ -3154,6 +3198,7 @@ void onKeyMenu(const KeyEvent& e) {
       case M_STATS: goStats(); break;
       case M_SETTINGS: goSettings(); break;
       case M_INFO: goInfo(); break;
+      case M_DEV: goDeveloper(); break;
     }
   }
 }
@@ -3211,7 +3256,12 @@ void onKeyReader(const KeyEvent& e) {
 // ============================================================
 unsigned long lastActivityMs = 0;
 
+// Czy czytnik zasnal w ksiazce (pamiec RTC przetrwa gleboki sen). Po wybudzeniu: w ksiazce
+// wracamy do ksiazki, poza nia do menu glownego. Po wlaczeniu zasilania jak dotad "Open last book".
+RTC_DATA_ATTR uint8_t sleptInBook = 1;
+
 void goSleep() {
+  sleptInBook = (screen == S_READER || screen == S_GOTO) ? 1 : 0;
   if (clockValid()) prefs.putUInt("clk_last", (uint32_t)clockNow());   // domyslna wartosc przy recznym ustawianiu po utracie zasilania
   Serial.println("sleep");
   statsFlush();              // dolicz czas czytania (tylko, gdy czytamy) i zapisz statystyki
@@ -3274,7 +3324,8 @@ void setup() {
   buildMenu();
   screen = S_MENU;
   char last[NAME_LEN];
-  if (cfg.autoOpen && getLastBook(last, sizeof(last))) {
+  bool resumed = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED;   // wybudzenie z glebokiego snu
+  if (cfg.autoOpen && (!resumed || sleptInBook) && getLastBook(last, sizeof(last))) {
     goReader(last);          // przy bledzie sam pokaze menu
   } else {
     drawMenu();
@@ -3304,6 +3355,29 @@ void loop() {
     saveBookmark();
   }
 
+  // Menu glowne: MENU trzymane dalej po "dlugim" wcisnieciu. Puszczone przed 10 s = uspienie
+  // (jak wszedzie), trzymane 10 s = wlacz/wylacz tryb Developer.
+  if (devHoldMs) {
+    if (!boardKeyDown(KEY_HOME)) {
+      devHoldMs = 0;
+      goSleep();
+      return;
+    }
+    if (millis() - devHoldMs >= DEV_HOLD_MS) {
+      devHoldMs = 0;
+      devMode = !devMode;
+      prefs.putBool("dev_on", devMode);
+      Serial.printf("tryb Developer: %s\n", devMode ? "wlaczony" : "wylaczony");
+      if (screen == S_MENU) {
+        buildMenu();
+        drawMenu();
+      }
+    }
+    lastActivityMs = millis();
+    delay(5);
+    return;
+  }
+
   KeyEvent e = inputPoll();
   if (e.type == EV_NONE) {
     unsigned long lim = (unsigned long)sleepMinutes[cfg.sleepIdx] * 60000UL;
@@ -3313,7 +3387,11 @@ void loop() {
   }
   lastActivityMs = millis();
 
-  // skrot: dlugie HOME = uspij teraz (poza trybem upload)
+  // skrot: dlugie HOME = uspij teraz (poza trybem upload); w menu glownym czekamy na puszczenie
+  if (e.key == KEY_HOME && isLong(e) && screen == S_MENU) {
+    devHoldMs = millis() - LONG_PRESS_MS;
+    return;
+  }
   if (e.key == KEY_HOME && isLong(e) && screen != S_UPLOAD) {
     goSleep();
     return;
@@ -3334,13 +3412,12 @@ void loop() {
       break;
     case S_INFO:
       if (e.key == KEY_BACK && isShort(e)) goMenu();
-      else if (e.key == KEY_OK && isShort(e) && !batteryAvailable()) goPinScan();
       break;
     case S_STATS:
       if (e.key == KEY_BACK && isShort(e)) goMenu();
       break;
     case S_PINSCAN:
-      if (e.key == KEY_BACK && isShort(e)) goInfo();
+      if (e.key == KEY_BACK && isShort(e)) goDeveloper();
       break;
     case S_GOTO: onKeyGoto(e); break;
     case S_SETTINGS: onKeySettings(e); break;
